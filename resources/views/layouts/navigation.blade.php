@@ -1,0 +1,34 @@
+<nav>
+    <div class="nav-container">
+        <a href="{{ route('home') }}" class="nav-brand">
+            <span>🎫</span>
+            <span>ConcertPass</span>
+        </a>
+
+        <div class="nav-links" style="display: flex; gap: 2rem;">
+            <a href="{{ route('home') }}" class="@if(request()->routeIs('home')) active @endif">Home</a>
+            <a href="{{ route('dashboard') }}" class="@if(request()->routeIs('dashboard')) active @endif">Dashboard</a>
+            @auth
+                <a href="{{ route('bookings.index') }}" class="@if(request()->routeIs('bookings.*')) active @endif">My Bookings</a>
+                @if(auth()->user()->role === 'admin')
+                    <a href="{{ route('admin.dashboard') }}" class="@if(request()->routeIs('admin.*')) active @endif">Admin</a>
+                @endif
+            @endauth
+        </div>
+
+        <div class="nav-user">
+            @auth
+                <div class="user-badge">
+                    <span>{{ Auth::user()->name }}</span>
+                    <span class="role">{{ auth()->user()->role }}</span>
+                </div>
+                <form method="POST" action="{{ route('logout') }}" style="display: inline;">
+                    @csrf
+                    <button type="submit" class="btn btn-primary btn-small">Log Out</button>
+                </form>
+            @else
+                <a href="{{ route('login') }}" class="btn btn-outline btn-small">Sign In</a>
+            @endauth
+        </div>
+    </div>
+</nav>

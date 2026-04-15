@@ -1,14 +1,5 @@
-<x-app-layout>
-    <div x-data="{ 
-        selectedSeat: null, 
-        selectedSection: null, 
-        selectedPrice: null,
-        selectSeat(number, section, price) {
-            this.selectedSeat = (this.selectedSeat === number) ? null : number;
-            this.selectedSection = section;
-            this.selectedPrice = price;
-        }
-    }">
+﻿<x-app-layout>
+    <div>
         <div style="margin-bottom: 3rem; border-radius: 0; overflow: hidden;">
             <div style="position: relative; height: 500px; overflow: hidden;">
                 @if($concert->poster_url)
@@ -65,37 +56,58 @@
             </div>
 
             <div class="lg:col-span-5">
-                <div class="sticky top-12" style="background: #000; border: 1px solid #1a1a1a; padding: 2.5rem;">
-                    <div style="border-top: 1px solid #27272a; padding-top: 1rem; margin-bottom: 3rem; text-align: center;">
-                        <span style="font-size: 9px; font-weight: 900; color: #52525b; text-transform: uppercase; letter-spacing: 0.8em;">Stage Area</span>
+                <div class="sticky top-12" style="background: #05050a; border: 1px solid #1a1a1a; padding: 2.5rem;">
+                    <div style="margin-bottom: 2rem; text-align: center;">
+                        <div style="margin: 0 auto 1rem auto; width: 240px; padding: 1rem 0; border-radius: 1.5rem; border: 1px solid rgba(148, 163, 184, 0.25);">
+                            <span style="font-size: 0.9rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #e0e7ff;">Stage</span>
+                        </div>
+                        <p style="margin: 0; font-size: 0.76rem; font-weight: 700; color: #94a3b8; letter-spacing: 0.15em; text-transform: uppercase;">Seating layout</p>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-bottom: 2.5rem;">
-                        @foreach($concert->concertSeats->sortBy(fn($s) => $s->seat->seat_number) as $concertSeat)
-                            @php
-                                $isAvailable = $concertSeat->status === 'available';
-                                $price = $concert->ticketPrices->where('section', $concertSeat->seat->section)->first()->price ?? 0;
-                            @endphp
-                            <button type="button"
-                                @click="selectSeat('{{ $concertSeat->seat->seat_number }}', '{{ $concertSeat->seat->section }}', '{{ number_format($price, 2) }}')"
-                                :class="selectedSeat === '{{ $concertSeat->seat->seat_number }}' 
-                                    ? 'bg-zinc-700 text-white border border-zinc-500' 
-                                    : '{{ $isAvailable ? 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white' : 'border border-zinc-900 text-zinc-900 cursor-not-allowed' }}'"
-                                style="aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 900; transition: all 0.2s; border: none; cursor: pointer;"
-                                {{ !$isAvailable ? 'disabled' : '' }}>
-                                {{ $concertSeat->seat->seat_number }}
-                            </button>
-                        @endforeach
-                    </div>
+                    @php
+                        $sections = $concert->concertSeats->groupBy(fn($seat) => $seat->seat->section);
+                        $orderedSections = collect();
+                        $order = ['floor', 'lower', 'upper', 'balcony'];
+                        foreach ($order as $orderName) {
+                            foreach ($sections as $name => $group) {
+                                if (str_contains(strtolower($name), $orderName) && !$orderedSections->has($name)) {
+                                    $orderedSections->put($name, $group);
+                                }
+                            }
+                        }
+                        foreach ($sections as $name => $group) {
+                            if (!$orderedSections->has($name)) {
+                                $orderedSections->put($name, $group);
+                            }
+                        }
+                    @endphp
 
-                    <div style="display: flex; justify-content: start; gap: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #18181b;">
+                    @foreach($orderedSections as $section => $seats)
+                        <div style="margin-bottom: 0.75rem; background: #0b0b16; border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 1.25rem; padding: 0.75rem;">
+                            <div style="display: grid; grid-template-columns: repeat(10, minmax(16px, 1fr)); gap: 3px; margin-bottom: 0.75rem;">
+                                @foreach($seats->sortBy(fn($s) => $s->seat->seat_number) as $concertSeat)
+                                    @php
+                                        $seatStyle = $concertSeat->status === 'available'
+                                            ? 'background: rgba(129, 140, 248, 0.18); border: 1px solid rgba(129, 140, 248, 0.35);'
+                                            : 'background: rgba(71, 85, 105, 0.25); border: 1px solid rgba(71, 85, 105, 0.45);';
+                                    @endphp
+                                        <div style="aspect-ratio: 1.3 / 1; border-radius: 0.65rem; {{ $seatStyle }} display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 700; color: #fff;">{{ preg_replace('/[^0-9]/', '', $concertSeat->seat->seat_number) }}</div>
+                                @endforeach
+                            </div>
+                            <div style="text-align: center; color: #94a3b8; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;">
+                                {{ $section }}
+                            </div>
+                        </div>
+                    @endforeach
+
+                    <div style="display: flex; justify-content: start; gap: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.12);">
                         <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div style="width: 8px; height: 8px; background: #18181b;"></div>
-                            <span style="font-size: 8px; font-weight: 700; color: #71717a; text-transform: uppercase;">Available</span>
+                            <div style="width: 10px; height: 10px; border-radius: 9999px; background: rgba(129, 140, 248, 0.5);"></div>
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.08em;">Available</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div style="width: 8px; height: 8px; background: #3f3f46;"></div>
-                            <span style="font-size: 8px; font-weight: 700; color: #71717a; text-transform: uppercase;">Selected</span>
+                            <div style="width: 10px; height: 10px; border-radius: 9999px; background: rgba(71, 85, 105, 0.7);"></div>
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em;">Unavailable</span>
                         </div>
                     </div>
                 </div>
@@ -104,25 +116,11 @@
 
         <div class="max-w-7xl mx-auto px-6" style="margin-bottom: 6rem; display: flex; flex-direction: column; gap: 1rem;">
             
-            <div x-show="selectedSeat" x-transition 
-                 style="background: #0a0a0a; border: 1px solid #1a1a1a; padding: 2.5rem; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <p style="font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.2em; color: #555; margin-bottom: 0.5rem;">Booking Confirmation</p>
-                    <h4 style="font-size: 2rem; font-weight: 900; text-transform: uppercase; color: #fff;">Section <span x-text="selectedSection"></span> — Seat #<span x-text="selectedSeat"></span></h4>
-                </div>
-                <div style="text-align: right;">
-                    <p style="font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.2em; color: #555; margin-bottom: 0.5rem;">Total Admission</p>
-                    <h4 style="font-size: 2.5rem; font-weight: 900; letter-spacing: -0.05em; color: #fff;">$<span x-text="selectedPrice"></span></h4>
-                </div>
-            </div>
-
             @auth
-                <a :href="selectedSeat ? `{{ route('bookings.create', ['concert' => $concert->id]) }}?seat=${selectedSeat}` : '#'" :class="!selectedSeat && 'opacity-20 pointer-events-none'"class="btn-primary" style="width: 100%; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 900; letter-spacing: 0.4em; border-radius: 0;  color: #000; border: none; transition: 0.3s; cursor: pointer;">
-                    <span x-text="selectedSeat ? 'PROCEED TO BOOKING' : 'SELECT A SEAT TO BOOK'"></span>
+                <a href="{{ route('bookings.create', ['concert' => $concert->id]) }}" class="btn-primary" style="width: 100%; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 900; letter-spacing: 0.4em; border-radius: 0; color: #000; border: none; transition: 0.3s; cursor: pointer;">
+                    SELECT A SEAT
                 </a>
-
             @else
-
                 <a href="{{ route('login') }}" style="width: 100%; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 900; letter-spacing: 0.4em; border: 1px solid #27272a; color: #fff; text-decoration: none;">
                     LOGIN TO BOOK
                 </a>

@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
+// Concerts listing and detail pages
+Route::get('/concerts', [HomeController::class, 'concerts'])->name('concerts.index');
+
 // More specific routes BEFORE generic ones
 Route::middleware('auth')->group(function () {
     Route::get('/concerts/{concert}/book', [BookingController::class, 'create'])->name('bookings.create')->where('concert', '[0-9]+');

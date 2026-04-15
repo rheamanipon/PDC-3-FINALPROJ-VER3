@@ -35,11 +35,17 @@ class BookingController extends Controller
     public function store(Request $request, Concert $concert)
     {
         $request->validate([
-            'seat_ids' => 'required|array|min:1',
+            'ticket_quantity' => 'required|integer|min:1|max:5',
+            'seat_ids' => 'required|array|min:1|max:5',
             'seat_ids.*' => 'exists:concert_seats,id',
         ]);
 
         $seatIds = $request->seat_ids;
+        $ticketQuantity = (int) $request->ticket_quantity;
+
+        if (count($seatIds) !== $ticketQuantity) {
+            return back()->withErrors(['seat_ids' => 'Selected seats must match the ticket quantity.']);
+        }
         $concertSeats = ConcertSeat::whereIn('id', $seatIds)->where('concert_id', $concert->id)->where('status', 'available')->get();
 
         if ($concertSeats->count() != count($seatIds)) {

@@ -1,50 +1,114 @@
 <x-app-layout>
     <!-- HERO SECTION -->
-    <div style="margin-bottom: 4rem;">
-        <h1 class="page-title" style="font-size: 4.5rem; margin-bottom: 1rem;">LIVE MUSIC AWAITS</h1>
-        <p class="page-subtitle" style="font-size: 1.5rem; color: var(--accent-primary); font-weight: 600;">Book Your Tickets Now</p>
-    </div>
+    <section style="max-width: 1400px; margin: 0 auto; padding: 3rem 2rem; text-align: center;">
+        <h1 style="font-size: 3.5rem; font-weight: 800; margin-bottom: 1rem; color: #ffffff;">Book Tickets Of Your Favorite Singers!</h1>
+        <p style="font-size: 1.125rem; color: #ff6600; font-weight: 600; margin-bottom: 3rem;">Make Your Night Unforgettable</p>
+    </section>
 
-    @if($concerts->count() > 0)
-        <div class="grid-3 mb-12">
-            @foreach($concerts->take(6) as $concert)
-                <a href="{{ route('concerts.show', $concert) }}" class="concert-card" style="text-decoration: none; display: block; transition: all 0.3s ease;">
-                    <div class="card">
-                        <!-- Event Image Placeholder -->
-                        <div class="card-image" style="background: linear-gradient(135deg, rgba(255, 102, 0, 0.8), rgba(255, 20, 147, 0.6)), url('https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=500&h=280&fit=crop'); background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 1.5rem; color: white; position: relative;"></div>
-                        
-                        <div class="card-header" style="padding: 1.5rem 1.5rem 0 1.5rem;">
-                            <div style="width: 100%;">
-                                <h3 class="card-title" style="font-size: 1.4rem;">{{ $concert->title }}</h3>
-                                <p class="card-subtitle" style="color: var(--accent-primary); font-weight: 600;">{{ $concert->artist }}</p>
-                            </div>
-                        </div>
-
-                        <div class="card-body" style="padding: 1rem 1.5rem;">
-                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 500;">📍 {{ $concert->venue->location }}</p>
-                            <p style="color: var(--accent-primary); margin-bottom: 0.75rem; font-weight: 600; font-size: 0.95rem;">📅 {{ $concert->date->format('M d, Y') }} • {{ $concert->time->format('g:i A') }}</p>
-                            <p style="color: var(--text-tertiary); font-size: 0.875rem;">{{ Str::limit($concert->description, 80) }}</p>
-                        </div>
-
-                        <div class="card-footer" style="justify-content: center;">
-                            <span class="btn btn-primary" style="width: auto;">BOOK NOW</span>
-                        </div>
+    <!-- CAROUSEL SECTION -->
+    <section style="max-width: 1400px; margin: 0 auto; padding: 2rem 2rem;">
+        <div style="display: flex; gap: 1.5rem; overflow-x: auto; padding-bottom: 1rem;">
+            @foreach($concerts->take(8) as $concert)
+                <div style="flex: 0 0 300px; background-color: #1a1a1a; border-radius: 0.5rem; overflow: hidden; cursor: pointer; transition: all 0.3s ease; border: 1px solid #2d2d2d;">
+                    @if($concert->poster_url)
+                    <div style="width: 100%; height: 200px; background: url('{{ asset('storage/' . $concert->poster_url) }}'); background-size: cover; background-position: center; display: flex; align-items: flex-end; padding: 1.5rem; color: white; font-size: 2rem;">
+                        &nbsp;
                     </div>
-                </a>
+                @else
+                    <div style="width: 100%; height: 200px; background: linear-gradient(135deg, rgba(255, 102, 0, 0.8), rgba(255, 20, 147, 0.6)); display: flex; align-items: flex-end; padding: 1.5rem; color: white; font-size: 2rem;">
+                        🎤
+                    </div>
+                @endif
+                    <div style="padding: 1.5rem;">
+                        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">{{ $concert->title }}</h3>
+                        <p style="color: #ff6600; font-weight: 600; margin-bottom: 0.5rem;">{{ $concert->artist }}</p>
+                        <p style="color: #d0d0d0; font-size: 0.875rem; margin-bottom: 1rem;">{{ $concert->date->format('M d, Y') }}</p>
+                        <a href="{{ route('concerts.show', $concert) }}" class="btn btn-primary" style="width: 100%; margin: 0; display: inline-flex; justify-content: center;">Book Now</a>
+                    </div>
+                </div>
             @endforeach
         </div>
-    @else
-        <div class="card" style="padding: 3rem; text-align: center;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🎭</div>
-            <h3 style="font-size: 2rem; margin-bottom: 0.5rem; text-transform: uppercase;">No Concerts Available</h3>
-            <p style="color: var(--text-secondary); font-size: 1.1rem;">Check back soon for upcoming events!</p>
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="{{ route('concerts.index') }}" class="btn btn-primary" style="padding: 0.75rem 3rem; font-size: 1.1rem;">View All Concerts</a>
         </div>
-    @endif
+    </section>
 
-    @if($concerts->count() > 6)
-        <div style="display: flex; justify-content: center; gap: 1.5rem; margin-top: 3rem;">
-            <button class="btn btn-outline">← Previous</button>
-            <button class="btn btn-primary">Next →</button>
+    <!-- OUR BENEFITS SECTION -->
+    <section style="max-width: 1400px; margin: 0 auto; padding: 3rem 2rem;">
+        <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 3rem; color: #ffffff;">Our Benefits</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; text-align: center; border: 1px solid #2d2d2d;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">⚡</div>
+                <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Instant Payment</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">We provide a safe & secure payment platform.</p>
+            </div>
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; text-align: center; border: 1px solid #2d2d2d;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🛒</div>
+                <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Online Booking</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">You can pay tickets directly from your home</p>
+            </div>
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; text-align: center; border: 1px solid #2d2d2d;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">♻️</div>
+                <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Refundable Tickets</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">If any problem occurs, we refund your ticket.</p>
+            </div>
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; text-align: center; border: 1px solid #2d2d2d;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">💰</div>
+                <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Cheapest Tickets</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">We offer the best prices you'll find anywhere else</p>
+            </div>
         </div>
-    @endif
+    </section>
+
+    <!-- TIME IS RUNNING OUT SECTION -->
+    <section style="max-width: 1400px; margin: 0 auto; padding: 3rem 2rem;">
+        <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 1rem; color: #ffffff;">Time is Running Out!</h2>
+        <p style="text-align: center; color: #a0a0a0; margin-bottom: 3rem;">Explore newly released events and book your tickets</p>
+        
+        <div style="display: flex; gap: 1.5rem; overflow-x: auto; padding-bottom: 1rem;">
+            @foreach($concerts->take(5) as $concert)
+                <div style="flex: 0 0 280px; border-radius: 0.5rem; overflow: hidden; border: 1px solid #2d2d2d; cursor: pointer; transition: all 0.3s ease; background-color: #1a1a1a;">
+                    @if($concert->poster_url)
+                        <div style="width: 100%; height: 180px; background: url('{{ asset('storage/' . $concert->poster_url) }}'); background-size: cover; background-position: center;"></div>
+                    @else
+                        <div style="width: 100%; height: 180px; background: linear-gradient(135deg, #ff6600, #ff1493); display: flex; align-items: center; justify-content: center; font-size: 4rem;">
+                            🎵
+                        </div>
+                    @endif
+                    <div style="padding: 1.5rem;">
+                        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">{{ $concert->artist }}</h3>
+                        <p style="color: #a0a0a0; font-size: 0.875rem; margin-bottom: 1rem;">{{ $concert->date->format('M d, Y') }}</p>
+                        <a href="{{ route('concerts.show', $concert) }}" class="btn btn-secondary" style="width: 100%; margin: 0; display: inline-flex; justify-content: center;">Book Now</a>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </section>
+
+    <!-- 4 EASY STEPS SECTION -->
+    <section style="max-width: 1400px; margin: 0 auto; padding: 3rem 2rem;">
+        <h2 style="font-size: 2rem; font-weight: 700; text-align: center; margin-bottom: 3rem; color: #ffffff;">4 Easy Steps To Buy a Ticket!</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; text-align: center;">
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; border: 1px solid #2d2d2d;">
+                <div style="width: 60px; height: 60px; background-color: #ff6600; border-radius: 50%; margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: #000;">1</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Choose a Concert</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">Select your favorite concert from our list</p>
+            </div>
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; border: 1px solid #2d2d2d;">
+                <div style="width: 60px; height: 60px; background-color: #ff1493; border-radius: 50%; margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: #000;">2</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Choose Date & Time</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">Pick the date and time that works best for you</p>
+            </div>
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; border: 1px solid #2d2d2d;">
+                <div style="width: 60px; height: 60px; background-color: #00d9ff; border-radius: 50%; margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: #000;">3</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Pay Your Bill</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">Complete the payment securely on our platform</p>
+            </div>
+            <div style="background-color: #1a1a1a; padding: 2rem; border-radius: 0.5rem; border: 1px solid #2d2d2d;">
+                <div style="width: 60px; height: 60px; background-color: #ff6600; border-radius: 50%; margin: 0 auto 1.5rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: #000;">4</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">Download Your Ticket</h3>
+                <p style="color: #a0a0a0; font-size: 0.875rem;">Get your ticket and enjoy the concert!</p>
+            </div>
+        </div>
+    </section>
 </x-app-layout>

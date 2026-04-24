@@ -81,7 +81,7 @@ class ConcertController extends Controller
      */
     public function show(Concert $concert)
     {
-        $concert->load('venue', 'ticketPrices', 'bookings');
+$concert->load(['venue', 'ticketPrices', 'bookings', 'concertSeats.seat']);
         return view('admin.concerts.show', compact('concert'));
     }
 

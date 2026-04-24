@@ -27,7 +27,7 @@ class BookingController extends Controller
 
     public function create(Concert $concert)
     {
-        $concert->load('venue.seats', 'ticketPrices', 'concertSeats');
+        $concert->load('venue.seats', 'ticketPrices', 'concertSeats.seat');
         $availableSeats = $concert->concertSeats()->where('status', 'available')->with('seat')->get();
         return view('bookings.create', compact('concert', 'availableSeats'));
     }

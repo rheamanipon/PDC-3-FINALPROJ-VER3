@@ -38,7 +38,7 @@
         @if($concerts->count() > 0)
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
                 @foreach($concerts as $concert)
-                    <div style="background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 0.5rem; overflow: hidden; transition: all 0.3s ease;">
+                    <div style="background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 0.5rem; overflow: hidden; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%;">
                         @if($concert->poster_url)
                             <div style="width: 100%; height: 200px; background: url('{{ asset('storage/' . $concert->poster_url) }}'); background-size: cover; background-position: center;"></div>
                         @else
@@ -46,12 +46,12 @@
                                 🎤
                             </div>
                         @endif
-                        <div style="padding: 1.5rem;">
+                        <div style="padding: 1.5rem; display: flex; flex-direction: column; flex: 1;">
                             <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">{{ $concert->title }}</h3>
                             <p style="color: #ff6600; font-weight: 600; margin-bottom: 0.5rem;">by {{ $concert->artist }}</p>
                             <p style="color: #777; font-size: 0.875rem; margin-bottom: 0.5rem;">{{ $concert->venue->location }}</p>
-                            <p style="color: #888; font-size: 0.875rem; margin-bottom: 1.5rem;">{{ $concert->date->format('M d, Y') }} at {{ $concert->time->format('g:i A') }}</p>
-                            <a href="{{ route('concerts.show', $concert) }}" style="display: block; width: 100%; text-align: center; padding: 0.75rem; background: #ff6600; border: none; border-radius: 0.25rem; color: #000; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; text-decoration: none; transition: background 0.3s;">
+                            <p style="color: #888; font-size: 0.875rem; margin-bottom: auto;">{{ $concert->date->format('M d, Y') }} at {{ $concert->time->format('g:i A') }}</p>
+                            <a href="{{ route('concerts.show', $concert) }}" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 45px; background: #ff6600; border: none; border-radius: 0.25rem; color: #000; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; text-decoration: none; transition: background 0.3s;">
                                 Book Now
                             </a>
                         </div>

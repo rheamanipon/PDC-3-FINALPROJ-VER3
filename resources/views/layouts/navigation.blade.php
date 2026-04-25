@@ -5,7 +5,7 @@
             <span>ConcertPass</span>
         </a>
 
-        <div class="nav-links" style="display: flex; gap: 2rem;">
+        <div class="nav-links">
             <a href="{{ route('home') }}" class="@if(request()->routeIs('home')) active @endif">Home</a>
             <a href="{{ route('dashboard') }}" class="@if(request()->routeIs('dashboard')) active @endif">Dashboard</a>
             @auth

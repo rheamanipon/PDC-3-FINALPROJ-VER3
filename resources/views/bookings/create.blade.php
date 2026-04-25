@@ -38,7 +38,7 @@
 
             <form action="{{ route('bookings.store', $concert) }}" method="POST">
                 @csrf
-                @php $prices = $concert->ticketPrices->pluck('price', 'section'); @endphp
+                @php $ticketPrices = $concert->ticketPrices; @endphp
 
                 <div class="card-body">
                     <!-- Capacity Check Warning -->
@@ -60,8 +60,15 @@
                             <label for="ticket_type" style="display: block; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">Ticket Type</label>
                             <select id="ticket_type" name="ticket_type" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid rgba(0,0,0,0.12); border-radius: 0.25rem; font-size: 0.95rem;">
                                 <option value="">Select ticket type</option>
-                                @foreach($prices as $type => $price)
-                                    <option value="{{ $type }}" data-price="{{ $price }}"> {{ $type }} - ${{ number_format($price, 2) }}</option>
+                                @foreach($ticketPrices as $ticketPrice)
+                                    <option
+                                        value="{{ $ticketPrice->id }}"
+                                        data-price="{{ $ticketPrice->price }}"
+                                        data-ticket-slug="{{ $ticketPrice->ticketType->name }}"
+                                        data-section="{{ $ticketPrice->section }}"
+                                    >
+                                        {{ $ticketPrice->section }} - ₱{{ number_format($ticketPrice->price, 2) }}
+                                    </option>
                                 @endforeach
                             </select>
                         </div>
@@ -83,11 +90,14 @@
 
                         <!-- Seat Selection (for UBB and LBB) -->
                         <div id="seat-selection" style="margin-bottom: 1.5rem; display: none;">
-                            <label for="seat_dropdown" style="display: block; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">Select Seat</label>
-                            <div style="display: grid; grid-template-columns: 1fr 150px; gap: 0.75rem; align-items: flex-end; margin-bottom: 1.5rem;">
-                                <select id="seat_dropdown" name="seat_dropdown" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid rgba(0,0,0,0.12); border-radius: 0.25rem; font-size: 0.95rem; color: var(--text-primary);">
-                                    <option value="">Choose a seat...</option>
-                                </select>
+                            <label for="seat_dropdown_toggle" style="display: block; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">Select Seat</label>
+                            <div style="display: grid; grid-template-columns: 1fr 150px; gap: 0.75rem; align-items: flex-end; margin-bottom: 1.5rem; position: relative;">
+                                <div class="custom-seat-dropdown" style="position: relative; width: 100%;">
+                                    <button type="button" id="seat_dropdown_toggle" class="seat-dropdown-toggle" style="width: 100%; text-align: left; padding: 0.75rem 1rem; border: 1px solid rgba(148,163,184,0.25); border-radius: 0.25rem; font-size: 0.95rem; color: var(--text-primary); background: var(--bg-secondary); cursor: pointer;">
+                                        Choose a seat...
+                                    </button>
+                                </div>
+                                <input type="hidden" id="seat_dropdown" name="seat_dropdown" value="">
                                 <button type="button" id="add-seat-ticket-btn" style="padding: 0.75rem 1rem; background: var(--accent-primary); color: white; border: none; border-radius: 0.25rem; font-weight: 700; cursor: pointer; white-space: nowrap; width: 100%;">+ ADD TICKET</button>
                             </div>
                         </div>
@@ -119,6 +129,14 @@
                     <button id="checkout-button" type="submit" class="btn btn-primary w-full" style="font-weight: 700; letter-spacing: 0.05em;" disabled>SELECT TICKET TYPE</button>
                 </div>
             </form>
+        </div>
+
+        <!-- Seat Dropdown Panel (moved outside card to avoid clipping) -->
+        <div id="seat_dropdown_panel" style="display: none; position: fixed; z-index: 9999; background: var(--bg-secondary); border: 1px solid rgba(148,163,184,0.25); border-radius: 0.5rem; box-shadow: 0 18px 40px rgba(15,23,42,0.35); max-height: 280px; overflow: hidden;">
+            <div style="padding: 0.75rem;">
+                <input id="seat_dropdown_search" type="text" placeholder="Search seat number..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid rgba(148,163,184,0.35); border-radius: 0.35rem; font-size: 0.95rem; color: var(--text-primary); background: var(--bg-tertiary);" aria-label="Search seat number">
+            </div>
+            <div id="seat_dropdown_list" style="max-height: 200px; overflow-y: auto; border-top: 1px solid rgba(148,163,184,0.15);"></div>
         </div>
 
         <!-- SIDEBAR: EVENT INFO -->
@@ -174,10 +192,10 @@
             </div>
             <div class="card-body">
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    @foreach($prices as $type => $price)
-                        <div style="display: flex; justify-content: space-between; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.5rem;">
-                            <span>{{ $type }}</span>
-                            <span style="font-weight: 700;">${{ number_format($price, 2) }}</span>
+                    @foreach($ticketPrices as $price)
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1rem; background: rgba(255, 255, 255, 0.03); border-left: 4px solid {{ $price->color ?? '#777' }}; border-radius: 0.5rem;">
+                            <span>{{ $price->section }}</span>
+                            <span style="font-weight: 700;">₱{{ number_format($price->price, 2) }}</span>
                         </div>
                     @endforeach
                 </div>
@@ -191,7 +209,11 @@
             const quantitySelect = document.getElementById('ticket_quantity');
             const quantitySection = document.getElementById('quantity-section');
             const seatSelection = document.getElementById('seat-selection');
-            const seatDropdown = document.getElementById('seat_dropdown');
+            const seatDropdownHidden = document.getElementById('seat_dropdown');
+            const seatDropdownToggle = document.getElementById('seat_dropdown_toggle');
+            const seatDropdownPanel = document.getElementById('seat_dropdown_panel');
+            const seatDropdownSearch = document.getElementById('seat_dropdown_search');
+            const seatDropdownList = document.getElementById('seat_dropdown_list');
             const addQuantityTicketBtn = document.getElementById('add-quantity-ticket-btn');
             const addSeatTicketBtn = document.getElementById('add-seat-ticket-btn');
             const addedTicketsDiv = document.getElementById('added-tickets');
@@ -205,10 +227,19 @@
             const checkoutButton = document.getElementById('checkout-button');
 
             let seatsData = [];
+            let seatDropdownOptions = [];
             let cartItems = [];
+            let loadingSeats = false;
             const concertId = {{ $concert->id }};
             const maxTickets = 5;
-            const seatSections = ['Lower Box B (LBB)', 'Upper Box B (UBB)'];
+            const seatRequiredSlugs = ['VIP Seated', 'LBB', 'UBB', 'LBA', 'UBA'];
+            const seatSectionMap = {
+                'VIP Seated': 'VIP Seated',
+                'LBB': 'Lower Box B (LBB)',
+                'UBB': 'Upper Box B (UBB)',
+                'LBA': 'Lower Box A (LBA)',
+                'UBA': 'Upper Box A (UBA)'
+            };
 
             function getCartQuantity() {
                 return cartItems.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
@@ -219,36 +250,178 @@
                 return option ? parseFloat(option.dataset.price) : 0;
             }
 
+            function getTicketSlug(type) {
+                const option = Array.from(ticketTypeSelect.options).find(opt => opt.value === type);
+                return option ? option.dataset.ticketSlug : '';
+            }
+
+            function getTicketDisplayName(type) {
+                const option = Array.from(ticketTypeSelect.options).find(opt => opt.value === type);
+                return option ? option.dataset.section || option.dataset.ticketSlug : '';
+            }
+
+            function getTicketSection(type) {
+                const slug = getTicketSlug(type);
+                return seatSectionMap[slug] || '';
+            }
+
             // Load seats data
             async function loadSeats() {
+                if (loadingSeats) {
+                    return;
+                }
+                loadingSeats = true;
                 try {
-                    const response = await fetch(`/concerts/${concertId}/seats`);
-                    seatsData = await response.json();
+                    const ticketTypeId = ticketTypeSelect.value;
+                    const response = await fetch(`/concerts/${concertId}/seats?concert_ticket_type_id=${encodeURIComponent(ticketTypeId)}`);
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        seatsData = [];
+                        alert(payload.error || 'Unable to load seats right now. Please try again.');
+                    } else {
+                        seatsData = Array.isArray(payload) ? payload : [];
+                    }
                     populateSeatDropdown();
                 } catch (error) {
                     console.error('Error loading seats:', error);
+                    seatsData = [];
+                    populateSeatDropdown();
+                } finally {
+                    loadingSeats = false;
                 }
             }
 
             // Populate seat dropdown
             function populateSeatDropdown() {
-                const ticketType = ticketTypeSelect.value;
-                seatDropdown.innerHTML = '<option value="">Choose a seat...</option>';
+                const selectedOption = ticketTypeSelect.selectedOptions[0];
+                const ticketSlug = selectedOption ? selectedOption.dataset.ticketSlug : '';
+                const ticketSection = seatSectionMap[ticketSlug] || '';
+                seatDropdownHidden.value = '';
+                seatDropdownToggle.textContent = ticketSection ? 'Choose a seat...' : 'Select ticket type first';
+                seatDropdownSearch.value = '';
+                seatDropdownPanel.style.display = 'none';
 
-                const availableSeats = seatsData.filter(seat => {
-                    const sectionMatch = seatSections.includes(ticketType) && seat.section === ticketType;
-                    const isAvailable = seat.status === 'available';
-                    const notAdded = !cartItems.some(item => item.seat_id == seat.id);
-                    return sectionMatch && isAvailable && notAdded;
-                });
+                seatDropdownOptions = seatsData
+                    .filter(seat => ticketSection && seat.section === ticketSection)
+                    .sort((a, b) => parseInt(a.seat_number, 10) - parseInt(b.seat_number, 10));
 
-                availableSeats.forEach(seat => {
-                    const option = document.createElement('option');
-                    option.value = JSON.stringify({ id: seat.id, number: seat.seat_number });
-                    option.textContent = `${seat.section} - Seat ${seat.seat_number}`;
-                    seatDropdown.appendChild(option);
-                });
+                renderSeatDropdown(seatDropdownOptions);
             }
+
+            function renderSeatDropdown(options, query = '') {
+                const normalizedQuery = query.trim().toLowerCase();
+                const filteredOptions = normalizedQuery
+                    ? options.filter(seat => seat.seat_number.toString().toLowerCase().includes(normalizedQuery))
+                    : options;
+
+                seatDropdownList.innerHTML = '';
+
+                if (!filteredOptions.length) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.style.cssText = 'padding: 0.75rem 1rem; color: var(--text-secondary);';
+                    emptyMessage.textContent = ticketDropdownEmptyMessage();
+                    seatDropdownList.appendChild(emptyMessage);
+                    return;
+                }
+
+                const fragment = document.createDocumentFragment();
+                const maxVisible = 200;
+                const visibleSeats = filteredOptions.slice(0, maxVisible);
+
+                visibleSeats.forEach(seat => {
+                    const isSelected = cartItems.some(item => item.seat_id == seat.id);
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.style.cssText = 'width: 100%; text-align: left; padding: 0.75rem 1rem; border: none; border-bottom: 1px solid rgba(148,163,184,0.12); background: transparent; color: var(--text-primary); cursor: pointer; transition: background 150ms ease;';
+                    button.textContent = `Seat ${seat.seat_number}`;
+
+                    if (seat.status !== 'available') {
+                        button.disabled = true;
+                        button.style.color = 'rgba(148, 163, 184, 0.9)';
+                        button.style.background = 'rgba(255,255,255,0.02)';
+                        button.textContent += ' — Unavailable';
+                    } else if (isSelected) {
+                        button.disabled = true;
+                        button.style.color = 'rgba(148, 163, 184, 0.9)';
+                        button.style.background = 'rgba(255,255,255,0.02)';
+                        button.textContent += ' — Selected';
+                    } else {
+                        button.addEventListener('click', () => {
+                            seatDropdownHidden.value = JSON.stringify({ id: seat.id, number: seat.seat_number });
+                            seatDropdownToggle.textContent = `Seat ${seat.seat_number}`;
+                            seatDropdownPanel.style.display = 'none';
+                        });
+                        button.addEventListener('mouseenter', () => {
+                            button.style.background = 'rgba(255, 102, 0, 0.12)';
+                        });
+                        button.addEventListener('mouseleave', () => {
+                            button.style.background = 'transparent';
+                        });
+                    }
+
+                    fragment.appendChild(button);
+                });
+
+                seatDropdownList.appendChild(fragment);
+
+                if (filteredOptions.length > maxVisible) {
+                    const footer = document.createElement('div');
+                    footer.style.cssText = 'padding: 0.75rem 1rem; color: var(--text-secondary); font-size: 0.85rem;';
+                    footer.textContent = `Showing ${maxVisible} of ${filteredOptions.length} matching seats`;
+                    seatDropdownList.appendChild(footer);
+                }
+            }
+
+            function ticketDropdownEmptyMessage() {
+                const selectedOption = ticketTypeSelect.selectedOptions[0];
+                const ticketSlug = selectedOption ? selectedOption.dataset.ticketSlug : '';
+                return ticketSlug ? 'No matching seats found.' : 'Select a seat type to show seats.';
+            }
+
+            seatDropdownToggle.addEventListener('click', async () => {
+                if (!seatDropdownOptions.length) {
+                    await loadSeats();
+                }
+
+                if (seatDropdownPanel.style.display === 'block') {
+                    seatDropdownPanel.style.display = 'none';
+                    return;
+                }
+
+                positionDropdownPanel();
+                seatDropdownPanel.style.display = 'block';
+                seatDropdownSearch.focus();
+            });
+
+            function positionDropdownPanel() {
+                const rect = seatDropdownToggle.getBoundingClientRect();
+                seatDropdownPanel.style.width = `${rect.width}px`;
+                seatDropdownPanel.style.left = `${rect.left}px`;
+                seatDropdownPanel.style.top = `${rect.bottom}px`;
+            }
+
+            // Reposition dropdown on scroll and resize
+            window.addEventListener('scroll', () => {
+                if (seatDropdownPanel.style.display === 'block') {
+                    positionDropdownPanel();
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (seatDropdownPanel.style.display === 'block') {
+                    positionDropdownPanel();
+                }
+            });
+
+            seatDropdownSearch.addEventListener('input', () => {
+                renderSeatDropdown(seatDropdownOptions, seatDropdownSearch.value);
+            });
+
+            document.addEventListener('click', (event) => {
+                if (!seatSelection.contains(event.target) && !seatDropdownPanel.contains(event.target)) {
+                    seatDropdownPanel.style.display = 'none';
+                }
+            });
 
             function updateCartInput() {
                 cartItemsInput.value = JSON.stringify(cartItems);
@@ -257,6 +430,7 @@
             // Add ticket to the cart
             function addTicket() {
                 const type = ticketTypeSelect.value;
+                const ticketSection = getTicketSection(type);
                 if (!type) {
                     alert('Please select a ticket type');
                     return;
@@ -268,8 +442,9 @@
                     return;
                 }
 
-                if (seatSections.includes(type)) {
-                    if (!seatDropdown.value) {
+                const ticketSlug = getTicketSlug(type);
+                if (seatRequiredSlugs.includes(ticketSlug)) {
+                    if (!seatDropdownHidden.value) {
                         alert('Please select a seat');
                         return;
                     }
@@ -279,9 +454,10 @@
                         return;
                     }
 
-                    const seatData = JSON.parse(seatDropdown.value);
+                    const seatData = JSON.parse(seatDropdownHidden.value);
                     cartItems.push({
-                        ticket_type: type,
+                        concert_ticket_type_id: type,
+                        ticket_type: ticketSection,
                         seat_id: seatData.id,
                         seat_number: seatData.number
                     });
@@ -298,12 +474,13 @@
                         return;
                     }
 
-                    const existingIndex = cartItems.findIndex(item => item.ticket_type === type && item.quantity);
+                    const existingIndex = cartItems.findIndex(item => item.concert_ticket_type_id === type && item.quantity);
                     if (existingIndex !== -1) {
                         cartItems[existingIndex].quantity += quantity;
                     } else {
                         cartItems.push({
-                            ticket_type: type,
+                            concert_ticket_type_id: type,
+                            ticket_type: getTicketDisplayName(type),
                             quantity: quantity
                         });
                     }
@@ -368,7 +545,7 @@
                 }
 
                 const total = cartItems.reduce((sum, item) => {
-                    const price = getTicketPrice(item.ticket_type);
+                    const price = getTicketPrice(item.concert_ticket_type_id);
                     return sum + price * (item.quantity ?? 1);
                 }, 0);
 
@@ -378,23 +555,23 @@
 
                 const seatItems = cartItems.filter(item => item.seat_id).map(item => `Seat ${item.seat_number}`);
 
-                totalPriceEl.textContent = `$${total.toFixed(2)}`;
+                totalPriceEl.textContent = `₱${total.toFixed(2)}`;
                 totalDetailsEl.textContent = details;
                 selectedSeatsSummary.style.display = seatItems.length ? 'block' : 'none';
                 seatsSummaryText.textContent = seatItems.join(', ');
                 totalPreview.style.display = 'block';
                 checkoutButton.disabled = false;
-                checkoutButton.textContent = `REVIEW ORDER ($${total.toFixed(2)})`;
+                checkoutButton.textContent = `REVIEW ORDER (₱${total.toFixed(2)})`;
             }
 
             // Handle ticket type change
             ticketTypeSelect.addEventListener('change', function() {
-                const type = this.value;
-                if (seatSections.includes(type)) {
+                const ticketSlug = getTicketSlug(this.value);
+                if (seatRequiredSlugs.includes(ticketSlug)) {
                     quantitySection.style.display = 'none';
                     seatSelection.style.display = 'block';
                     loadSeats();
-                } else if (type === 'VIP Standing' || type === 'General Admission (Gen Ad)') {
+                } else if (ticketSlug === 'VIP Standing' || ticketSlug === 'GEN AD') {
                     quantitySection.style.display = 'block';
                     seatSelection.style.display = 'none';
                 } else {

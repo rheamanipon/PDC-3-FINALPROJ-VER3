@@ -36,7 +36,7 @@
                     <div class="bookings-card-footer">
                         <div>
                             <p class="bookings-total-label">Total Price</p>
-                            <p class="bookings-total-value">${{ number_format($booking->total_price, 2) }}</p>
+                            <p class="bookings-total-value">₱{{ number_format($booking->total_price, 2) }}</p>
                         </div>
                         <span class="btn btn-primary btn-small">View Details</span>
                     </div>

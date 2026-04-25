@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('title');
             $table->text('description')->nullable();
             $table->string('artist');
-            $table->foreignId('venue_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('venue_id')->constrained()->restrictOnDelete();
             $table->date('date');
             $table->time('time');
             $table->string('poster_url')->nullable();

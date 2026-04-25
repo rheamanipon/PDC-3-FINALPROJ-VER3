@@ -14,6 +14,11 @@ return new class extends Migration
         Schema::create('tickets', function (Blueprint $table) {
             $table->id();
             $table->foreignId('booking_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('concert_ticket_type_id')
+                ->nullable()
+                ->constrained('concert_ticket_types')
+                ->nullOnDelete()
+                ->after('booking_id');
             $table->string('ticket_type');
             $table->decimal('price_at_purchase', 10, 2);
             $table->string('qr_code')->nullable();

@@ -46,9 +46,12 @@
                     <h3 class="card-title" style="margin-bottom: 1.5rem; color: #fff;">TICKET PRICES</h3>
                     <div style="display: flex; flex-direction: column; gap: 1rem;">
                         @foreach($concert->ticketPrices as $price)
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-left: 3px solid #333; background-color: #111;">
-                                <span style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #eee;">{{ $price->section }}</span>
-                                <span style="font-size: 1.5rem; font-weight: 800; color: #fff;">${{ number_format($price->price, 2) }}</span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-left: 4px solid {{ $price->color ?? '#777' }}; background-color: #111;">
+                                <span style="display: flex; align-items: center; gap: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #eee;">
+                                    <span style="width: 0.85rem; height: 0.85rem; background: {{ $price->color ?? '#777' }}; border-radius: 9999px; display: inline-block;"></span>
+                                    {{ $price->section }}
+                                </span>
+                                <span style="font-size: 1.5rem; font-weight: 800; color: #fff;">₱{{ number_format($price->price, 2) }}</span>
                             </div>
                         @endforeach
                     </div>
@@ -73,24 +76,18 @@
 
                     <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(148, 163, 184, 0.12);">
                         <p style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1rem; text-align: center;">SECTION LEGEND</p>
-                        <div style="display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 1rem;">
-                            <div style="text-align: center;">
-                                <div style="width: 12px; height: 12px; background: #f97316; border-radius: 2px; margin: 0 auto 0.5rem;"></div>
-                                <span style="font-size: 0.75rem; font-weight: 700; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.08em; display: block;">VIP Standing</span>
+                        @if($concert->ticketPrices->isNotEmpty())
+                            <div style="display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 1rem;">
+                                @foreach($concert->ticketPrices as $price)
+                                    <div style="text-align: center;">
+                                        <div style="width: 12px; height: 12px; background: {{ $price->color ?? '#777' }}; border-radius: 2px; margin: 0 auto 0.5rem;"></div>
+                                        <span style="font-size: 0.75rem; font-weight: 700; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.08em; display: block;">{{ $price->section }}</span>
+                                    </div>
+                                @endforeach
                             </div>
-                            <div style="text-align: center;">
-                                <div style="width: 12px; height: 12px; background: #a855f7; border-radius: 2px; margin: 0 auto 0.5rem;"></div>
-                                <span style="font-size: 0.75rem; font-weight: 700; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.08em; display: block;">LBB</span>
-                            </div>
-                            <div style="text-align: center;">
-                                <div style="width: 12px; height: 12px; background: #22c55e; border-radius: 2px; margin: 0 auto 0.5rem;"></div>
-                                <span style="font-size: 0.75rem; font-weight: 700; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.08em; display: block;">UBB</span>
-                            </div>
-                            <div style="text-align: center;">
-                                <div style="width: 12px; height: 12px; background: #38bdf8; border-radius: 2px; margin: 0 auto 0.5rem;"></div>
-                                <span style="font-size: 0.75rem; font-weight: 700; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.08em; display: block;">Gen Ad</span>
-                            </div>
-                        </div>
+                        @else
+                            <div style="text-align: center; color: #94a3b8;">No ticket sections configured for this event.</div>
+                        @endif
                     </div>
                 </div>
             </div>

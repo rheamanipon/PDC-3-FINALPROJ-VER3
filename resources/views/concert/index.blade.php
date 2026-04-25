@@ -1,14 +1,14 @@
 <x-app-layout>
-    <div class="max-w-7xl mx-auto px-6 py-8">
+    <div class="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <!-- Header -->
-        <div style="text-align: center; margin-bottom: 3rem;">
-            <h1 style="font-size: 3rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">ALL CONCERTS</h1>
-            <p style="color: #888; font-size: 1.125rem;">Discover and book tickets for upcoming concerts</p>
+        <div class="text-center mb-12">
+            <h1 class="text-3xl md:text-5xl font-extrabold text-white mb-2">ALL CONCERTS</h1>
+            <p class="text-gray-400 text-lg">Discover and book tickets for upcoming concerts</p>
         </div>
 
         <!-- Filters -->
-        <div style="background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 0.5rem; padding: 2rem; margin-bottom: 3rem;">
-            <form method="GET" action="{{ route('concerts.index') }}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 md:p-8 mb-12">
+            <form method="GET" action="{{ route('concerts.index') }}" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div>
                     <label for="search" style="display: block; color: #555; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; margin-bottom: 0.75rem;">Search</label>
                     <input type="text" name="search" id="search" value="{{ request('search') }}" placeholder="Concert or artist name" style="width: 100%; padding: 0.75rem; background: #111; border: 1px solid #333; border-radius: 0.25rem; color: #fff; font-size: 0.9rem;">
@@ -36,22 +36,22 @@
 
         <!-- Concerts Grid -->
         @if($concerts->count() > 0)
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 mb-12">
                 @foreach($concerts as $concert)
-                    <div style="background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 0.5rem; overflow: hidden; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%;">
+                    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden transition-all duration-300 flex flex-col h-full">
                         @if($concert->poster_url)
-                            <div style="width: 100%; height: 200px; background: url('{{ asset('storage/' . $concert->poster_url) }}'); background-size: cover; background-position: center;"></div>
+                            <div class="w-full h-48 bg-cover bg-center" style="background-image: url('{{ asset('storage/' . $concert->poster_url) }}');"></div>
                         @else
-                            <div style="width: 100%; height: 200px; background: linear-gradient(135deg, #ff6600, #d10070); display: flex; align-items: center; justify-content: center; font-size: 3rem;">
+                            <div class="w-full h-48 bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center text-5xl">
                                 🎤
                             </div>
                         @endif
-                        <div style="padding: 1.5rem; display: flex; flex-direction: column; flex: 1;">
-                            <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">{{ $concert->title }}</h3>
-                            <p style="color: #ff6600; font-weight: 600; margin-bottom: 0.5rem;">by {{ $concert->artist }}</p>
-                            <p style="color: #777; font-size: 0.875rem; margin-bottom: 0.5rem;">{{ $concert->venue->location }}</p>
-                            <p style="color: #888; font-size: 0.875rem; margin-bottom: auto;">{{ $concert->date->format('M d, Y') }} at {{ $concert->time->format('g:i A') }}</p>
-                            <a href="{{ route('concerts.show', $concert) }}" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 45px; background: #ff6600; border: none; border-radius: 0.25rem; color: #000; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; text-decoration: none; transition: background 0.3s;">
+                        <div class="p-6 flex flex-col flex-1">
+                            <h3 class="text-xl font-bold mb-2 text-white">{{ $concert->title }}</h3>
+                            <p class="text-orange-500 font-semibold mb-2">by {{ $concert->artist }}</p>
+                            <p class="text-gray-500 text-sm mb-2">{{ $concert->venue->location }}</p>
+                            <p class="text-gray-400 text-sm mb-auto">{{ $concert->date->format('M d, Y') }} at {{ $concert->time->format('g:i A') }}</p>
+                            <a href="{{ route('concerts.show', $concert) }}" class="inline-flex items-center justify-center w-full h-11 bg-orange-500 hover:bg-orange-600 border-none rounded text-black font-bold uppercase tracking-wider no-underline transition-colors duration-300">
                                 Book Now
                             </a>
                         </div>
@@ -64,10 +64,10 @@
                 {{ $concerts->links() }}
             </div>
         @else
-            <div style="text-align: center; padding: 4rem 2rem;">
-                <div style="font-size: 4rem; margin-bottom: 2rem;">🎟️</div>
-                <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">No concerts found</h3>
-                <p style="color: #888; font-size: 1rem;">Try adjusting your filters or check back later for new events.</p>
+            <div class="text-center py-16 px-8">
+                <div class="text-6xl mb-8">🎟️</div>
+                <h3 class="text-2xl font-bold mb-2 text-white">No concerts found</h3>
+                <p class="text-gray-400 text-lg">Try adjusting your filters or check back later for new events.</p>
             </div>
         @endif
     </div>

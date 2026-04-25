@@ -74,7 +74,7 @@
                                     @endif
                                 </div>
                                 <div style="font-weight: 700; color: var(--accent-primary);">
-                                    ${{ number_format($priceRecords[$item['ticket_type']] * ($item['quantity'] ?? 1), 2) }}
+                                    ₱{{ number_format($priceRecords[$item['concert_ticket_type_id']] * ($item['quantity'] ?? 1), 2) }}
                                 </div>
                             </div>
                         @endforeach
@@ -85,7 +85,7 @@
                 <div style="border-top: 1px solid rgba(148, 163, 184, 0.2); padding-top: 1.5rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary);">Total</span>
-                        <span style="font-size: 1.5rem; font-weight: 700; color: var(--accent-primary);">${{ number_format($totalPrice, 2) }}</span>
+                        <span style="font-size: 1.5rem; font-weight: 700; color: var(--accent-primary);">₱{{ number_format($totalPrice, 2) }}</span>
                     </div>
                     <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
                         {{ $totalQuantity }} ticket{{ $totalQuantity > 1 ? 's' : '' }}

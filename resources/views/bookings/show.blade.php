@@ -39,13 +39,19 @@
                         <div style="padding: 1.25rem; border-left: 3px solid var(--accent-primary); background-color: rgba(255, 102, 0, 0.05);">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
                                 <div>
-                                    <p style="color: var(--text-tertiary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.25rem;">Seat Number</p>
-                                    <p style="font-size: 1.5rem; font-weight: 800;">{{ $ticket->seat->seat_number }}</p>
-                                    <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;">Section: {{ $ticket->seat->section }}</p>
+                                    @if($ticket->seat)
+                                        <p style="color: var(--text-tertiary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.25rem;">Seat Number</p>
+                                        <p style="font-size: 1.5rem; font-weight: 800;">{{ $ticket->seat->seat_number }}</p>
+                                        <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;">Section: {{ $ticket->seat->section }}</p>
+                                    @else
+                                        <p style="color: var(--text-tertiary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.25rem;">Ticket Type</p>
+                                        <p style="font-size: 1.5rem; font-weight: 800;">{{ $ticket->ticket_type }}</p>
+                                        <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem;">No seat assigned</p>
+                                    @endif
                                 </div>
                                 <div style="text-align: right;">
                                     <p style="color: var(--text-tertiary); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 0.25rem;">Price</p>
-                                    <p style="font-size: 1.5rem; font-weight: 800; color: var(--accent-primary);">${{ number_format($ticket->price_at_purchase, 2) }}</p>
+                                    <p style="font-size: 1.5rem; font-weight: 800; color: var(--accent-primary);">₱{{ number_format($ticket->price_at_purchase, 2) }}</p>
                                 </div>
                             </div>
                             @if($ticket->qr_code)
@@ -76,7 +82,7 @@
                     <div style="display: flex; flex-direction: column; gap: 1.5rem;">
                         <div style="padding: 1.5rem; border-left: 3px solid var(--accent-primary); background-color: rgba(255, 102, 0, 0.05);">
                             <p style="color: var(--text-tertiary); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.1em; margin-bottom: 0.75rem;">Total Amount</p>
-                            <p style="font-size: 2.5rem; font-weight: 800; color: var(--accent-primary);">${{ number_format($booking->payment->amount, 2) }}</p>
+                            <p style="font-size: 2.5rem; font-weight: 800; color: var(--accent-primary);">₱{{ number_format($booking->payment->amount, 2) }}</p>
                         </div>
 
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">

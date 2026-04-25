@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\ConcertTicketType;
 use Illuminate\Database\Eloquent\Model;
 
 class ConcertSeat extends Model
 {
     protected $fillable = [
         'concert_id',
+        'concert_ticket_type_id',
         'seat_id',
         'status',
     ];
@@ -24,5 +26,10 @@ class ConcertSeat extends Model
     public function seat()
     {
         return $this->belongsTo(Seat::class);
+    }
+
+    public function concertTicketType()
+    {
+        return $this->belongsTo(ConcertTicketType::class);
     }
 }

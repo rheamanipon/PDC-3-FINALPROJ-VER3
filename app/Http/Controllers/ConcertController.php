@@ -4,12 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\Concert;
-use App\Models\TicketPrice;
+use App\Models\ConcertTicketType;
+use App\Models\Ticket;
+use App\Models\TicketType;
 use App\Models\Venue;
+use App\Services\ConcertSeatSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ConcertController extends Controller
 {
+    public function __construct(private ConcertSeatSyncService $concertSeatSyncService)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -25,7 +33,27 @@ class ConcertController extends Controller
     public function create()
     {
         $venues = Venue::all();
-        return view('admin.concerts.create', compact('venues'));
+        $ticketTypes = TicketType::all();
+
+        if ($ticketTypes->isEmpty()) {
+            $defaultTypes = [
+                ['name' => 'VIP Standing', 'description' => 'VIP Standing'],
+                ['name' => 'VIP Seated', 'description' => 'VIP Seated'],
+                ['name' => 'LBB', 'description' => 'Lower Box B'],
+                ['name' => 'UBB', 'description' => 'Upper Box B'],
+                ['name' => 'LBA', 'description' => 'Lower Box A'],
+                ['name' => 'UBA', 'description' => 'Upper Box A'],
+                ['name' => 'GEN AD', 'description' => 'General Admission'],
+            ];
+
+            foreach ($defaultTypes as $type) {
+                TicketType::firstOrCreate(['name' => $type['name']], ['description' => $type['description']]);
+            }
+
+            $ticketTypes = TicketType::all();
+        }
+
+        return view('admin.concerts.create', compact('venues', 'ticketTypes'));
     }
 
     /**
@@ -41,12 +69,26 @@ class ConcertController extends Controller
             'date' => 'required|date|after:today',
             'time' => 'required|date_format:H:i',
             'poster' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'ticket_types' => 'required|array|min:1',
+            'ticket_types.*.ticket_type_id' => 'required|exists:ticket_types,id',
+            'ticket_types.*.price' => 'required|numeric|min:0',
+            'ticket_types.*.quantity' => 'required|integer|min:1',
+            'ticket_types.*.color' => 'required|string|regex:/^#[a-fA-F0-9]{6}$/',
         ]);
 
         $data = $request->only(['title', 'description', 'artist', 'venue_id', 'date', 'time']);
 
         if ($request->hasFile('poster')) {
             $data['poster_url'] = $request->file('poster')->store('posters', 'public');
+        }
+
+        $venue = Venue::find($request->venue_id);
+        $totalTicketQuantity = collect($request->ticket_types)->sum('quantity');
+
+        if ($venue && $totalTicketQuantity !== $venue->capacity) {
+            return back()
+                ->withInput()
+                ->withErrors(['ticket_types' => "Ticket quantities must total the venue capacity of {$venue->capacity}. You provided {$totalTicketQuantity}. Please adjust the ticket type quantities."]);
         }
 
         $data['seat_plan_image'] = $request->hasFile('seat_plan_image') ? $request->file('seat_plan_image')->store('seat-plans', 'public') : null;
@@ -59,17 +101,19 @@ class ConcertController extends Controller
             'description' => 'Created concert: '.$concert->title,
         ]);
 
-        // Create default ticket prices for new types
-        $ticketTypes = ['VIP Standing', 'VIP Seated', 'Lower Box B (LBB)', 'Upper Box B (UBB)', 'General Admission (Gen Ad)'];
-        $defaultPrices = [250.00, 200.00, 150.00, 100.00, 75.00];
-
-        foreach ($ticketTypes as $index => $type) {
-            TicketPrice::create([
+        // Create concert ticket types
+        foreach ($request->ticket_types as $ticketData) {
+            ConcertTicketType::create([
                 'concert_id' => $concert->id,
-                'section' => $type,
-                'price' => $defaultPrices[$index],
+                'ticket_type_id' => $ticketData['ticket_type_id'],
+                'price' => $ticketData['price'],
+                'quantity' => $ticketData['quantity'],
+                'color' => $ticketData['color'],
             ]);
         }
+
+        // Keep selectable seats synchronized with ticket allocations.
+        $this->concertSeatSyncService->syncConcert($concert);
 
         return redirect()->route('admin.concerts.index')->with('success', 'Concert created successfully.');
     }
@@ -79,8 +123,41 @@ class ConcertController extends Controller
      */
     public function show(Concert $concert)
     {
-        $concert->load(['venue', 'ticketPrices', 'bookings']);
-        return view('admin.concerts.show', compact('concert'));
+        $concert->load(['venue', 'concertTicketTypes.ticketType', 'bookings']);
+
+        $ticketTypeSalesById = Ticket::whereHas('booking', function ($query) use ($concert) {
+            $query->where('concert_id', $concert->id);
+        })
+        ->select('concert_ticket_type_id', DB::raw('count(*) as count'))
+        ->groupBy('concert_ticket_type_id')
+        ->pluck('count', 'concert_ticket_type_id')
+        ->all();
+
+        $ticketTypeSalesByLabel = Ticket::whereHas('booking', function ($query) use ($concert) {
+            $query->where('concert_id', $concert->id);
+        })
+        ->whereNull('concert_ticket_type_id')
+        ->select('ticket_type', DB::raw('count(*) as count'))
+        ->groupBy('ticket_type')
+        ->pluck('count', 'ticket_type')
+        ->all();
+
+        $ticketTypeAvailability = $concert->concertTicketTypes->map(function (ConcertTicketType $concertTicketType) use ($ticketTypeSalesById, $ticketTypeSalesByLabel) {
+            $ticketTypeSlug = $concertTicketType->ticketType->name ?? '';
+            $ticketTypeLabel = $concertTicketType->custom_name ?: ($concertTicketType->ticketType->description ? $concertTicketType->ticketType->description . ' (' . $ticketTypeSlug . ')' : $ticketTypeSlug);
+            $sold = $ticketTypeSalesById[$concertTicketType->id] ?? ($ticketTypeSalesByLabel[$ticketTypeLabel] ?? 0);
+            $remaining = max(0, $concertTicketType->quantity - $sold);
+
+            return [
+                'label' => $ticketTypeLabel,
+                'slug' => $ticketTypeSlug,
+                'quantity' => $concertTicketType->quantity,
+                'sold' => $sold,
+                'remaining' => $remaining,
+            ];
+        });
+
+        return view('admin.concerts.show', compact('concert', 'ticketTypeAvailability'));
     }
 
     /**
@@ -89,7 +166,9 @@ class ConcertController extends Controller
     public function edit(Concert $concert)
     {
         $venues = Venue::all();
-        return view('admin.concerts.edit', compact('concert', 'venues'));
+        $ticketTypes = TicketType::all();
+        $concert->load('concertTicketTypes.ticketType');
+        return view('admin.concerts.edit', compact('concert', 'venues', 'ticketTypes'));
     }
 
     /**
@@ -106,7 +185,22 @@ class ConcertController extends Controller
             'time' => 'required|date_format:H:i',
             'poster' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
             'seat_plan_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'ticket_types' => 'required|array|min:1',
+            'ticket_types.*.id' => 'nullable|exists:concert_ticket_types,id',
+            'ticket_types.*.ticket_type_id' => 'required|exists:ticket_types,id',
+            'ticket_types.*.price' => 'required|numeric|min:0',
+            'ticket_types.*.quantity' => 'required|integer|min:1',
+            'ticket_types.*.color' => 'required|string|regex:/^#[a-fA-F0-9]{6}$/',
         ]);
+
+        $venue = Venue::find($request->venue_id);
+        $totalTicketQuantity = collect($request->ticket_types)->sum('quantity');
+
+        if ($venue && $totalTicketQuantity !== $venue->capacity) {
+            return back()
+                ->withInput()
+                ->withErrors(['ticket_types' => "Ticket quantities must total the venue capacity of {$venue->capacity}. You provided {$totalTicketQuantity}. Please adjust the ticket type quantities."]);
+        }
 
         $data = $request->only(['title', 'description', 'artist', 'venue_id', 'date', 'time']);
 
@@ -121,11 +215,67 @@ class ConcertController extends Controller
         $oldVenueId = $concert->venue_id;
         $concert->update($data);
 
+        $existingTypes = $concert->concertTicketTypes->keyBy('id');
+        $submittedTypeIds = [];
+        $ticketAllocationChanged = false;
+
+        foreach ($request->ticket_types as $ticketData) {
+            if (!empty($ticketData['id']) && $existingTypes->has($ticketData['id'])) {
+                $concertTicketType = $existingTypes->get($ticketData['id']);
+                $soldCount = Ticket::where('concert_ticket_type_id', $concertTicketType->id)->count();
+
+                if ($ticketData['quantity'] < $soldCount) {
+                    return back()
+                        ->withInput()
+                        ->withErrors(['ticket_types' => "Ticket quantity for {$concertTicketType->ticketType->name} cannot be less than already sold tickets ({$soldCount})."]);
+                }
+
+                $typeChanged = $concertTicketType->ticket_type_id !== $ticketData['ticket_type_id']
+                    || $concertTicketType->quantity !== $ticketData['quantity'];
+
+                $concertTicketType->update([
+                    'ticket_type_id' => $ticketData['ticket_type_id'],
+                    'price' => $ticketData['price'],
+                    'quantity' => $ticketData['quantity'],
+                    'color' => $ticketData['color'],
+                ]);
+
+                if ($typeChanged) {
+                    $ticketAllocationChanged = true;
+                }
+
+                $submittedTypeIds[] = $concertTicketType->id;
+            } else {
+                $created = ConcertTicketType::create([
+                    'concert_id' => $concert->id,
+                    'ticket_type_id' => $ticketData['ticket_type_id'],
+                    'price' => $ticketData['price'],
+                    'quantity' => $ticketData['quantity'],
+                    'color' => $ticketData['color'],
+                ]);
+                $submittedTypeIds[] = $created->id;
+                $ticketAllocationChanged = true;
+            }
+        }
+
+        foreach ($existingTypes as $existingType) {
+            if (!in_array($existingType->id, $submittedTypeIds, true)) {
+                $soldCount = Ticket::where('concert_ticket_type_id', $existingType->id)->count();
+                if ($soldCount > 0) {
+                    return back()
+                        ->withInput()
+                        ->withErrors(['ticket_types' => "Cannot remove ticket type {$existingType->ticketType->name} because {$soldCount} tickets have already been sold."]);
+                }
+                $existingType->delete();
+                $ticketAllocationChanged = true;
+            }
+        }
+
         $description = 'Updated concert: '.$concert->title;
         $venueChanged = $oldVenueId != $request->venue_id;
-        if ($venueChanged) {
-            $this->regenerateTicketPrices($concert);
-            $description .= ' (venue changed, ticket prices regenerated)';
+        if ($venueChanged || $ticketAllocationChanged) {
+            $this->concertSeatSyncService->syncConcert($concert);
+            $description .= ' (seat allocation synced)';
         }
 
         ActivityLog::record([
@@ -138,47 +288,9 @@ class ConcertController extends Controller
 
         $successMsg = 'Concert updated successfully.';
         if ($venueChanged) {
-            $successMsg .= ' Seats and ticket prices regenerated for new venue.';
+            $successMsg .= ' Seats regenerated for new venue.';
         }
         return redirect()->route('admin.concerts.index')->with('success', $successMsg);
-    }
-
-    /**
-     * Regenerate concert seats for the current venue
-     */
-    private function regenerateConcertSeats(Concert $concert)
-    {
-        // Delete existing seats for this concert
-        ConcertSeat::where('concert_id', $concert->id)->delete();
-
-        $venue = $concert->venue;
-        foreach ($venue->seats as $seat) {
-            ConcertSeat::create([
-                'concert_id' => $concert->id,
-                'seat_id' => $seat->id,
-                'status' => 'available',
-            ]);
-        }
-    }
-
-    /**
-     * Regenerate default ticket prices
-     */
-    private function regenerateTicketPrices(Concert $concert)
-    {
-        // Delete existing ticket prices
-        TicketPrice::where('concert_id', $concert->id)->delete();
-
-        $sections = ['Floor', 'Lower Bowl', 'Upper Bowl', 'Balcony'];
-        $defaultPrices = [150.00, 100.00, 75.00, 50.00];
-
-        foreach ($sections as $index => $section) {
-            TicketPrice::create([
-                'concert_id' => $concert->id,
-                'section' => $section,
-                'price' => $defaultPrices[$index],
-            ]);
-        }
     }
 
     /**

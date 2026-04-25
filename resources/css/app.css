@@ -122,10 +122,16 @@ nav {
 .nav-container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 1rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+@media (min-width: 768px) {
+    .nav-container {
+        padding: 0 2rem;
+    }
 }
 
 .nav-brand {
@@ -147,10 +153,16 @@ nav {
 
 .nav-links {
     display: flex;
-    gap: 2.5rem;
+    gap: 1rem;
     list-style: none;
     margin: 0;
     padding: 0;
+}
+
+@media (min-width: 768px) {
+    .nav-links {
+        gap: 2.5rem;
+    }
 }
 
 .nav-links a {
@@ -187,7 +199,13 @@ nav {
 .nav-user {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+    .nav-user {
+        gap: 1.5rem;
+    }
 }
 
 .user-badge {
@@ -994,8 +1012,14 @@ tr:hover {
 
 .bookings-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 1.1rem;
+}
+
+@media (min-width: 768px) {
+    .bookings-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .bookings-card-link {
@@ -1049,8 +1073,14 @@ tr:hover {
 
 .bookings-detail-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+    .bookings-detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .bookings-detail-grid p {

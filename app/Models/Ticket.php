@@ -8,6 +8,7 @@ class Ticket extends Model
 {
     protected $fillable = [
         'booking_id',
+        'concert_ticket_type_id',
         'seat_id',
         'ticket_type',
         'price_at_purchase',
@@ -26,5 +27,10 @@ class Ticket extends Model
     public function seat()
     {
         return $this->belongsTo(Seat::class);
+    }
+
+    public function concertTicketType()
+    {
+        return $this->belongsTo(ConcertTicketType::class);
     }
 }

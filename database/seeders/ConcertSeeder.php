@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\Concert;
-use App\Models\TicketPrice;
+use App\Models\ConcertTicketType;
+use App\Models\Seat;
+use App\Models\TicketType;
 use App\Models\Venue;
 use Illuminate\Database\Seeder;
 
@@ -14,9 +16,33 @@ class ConcertSeeder extends Seeder
      */
     public function run(): void
     {
-        // Ensure venue exists (Madison Square Garden from VenueSeeder)
-        $venueId = 1;
-        $venue = Venue::find($venueId);
+        // Get venues
+        $manilaVenue = Venue::where('location', 'like', '%Manila%')->first();
+        $nyVenue = Venue::where('location', 'like', '%New York%')->first();
+
+        if (!$manilaVenue || !$nyVenue) {
+            return; // Skip if venues not found
+        }
+
+        // Create ticket types if not exist
+        $ticketTypesData = [
+            ['name' => 'VIP Standing', 'description' => 'VIP Standing'],
+            ['name' => 'VIP Seated', 'description' => 'VIP Seated'],
+            ['name' => 'LBB', 'description' => 'Lower Box B'],
+            ['name' => 'UBB', 'description' => 'Upper Box B'],
+            ['name' => 'LBA', 'description' => 'Lower Box A'],
+            ['name' => 'UBA', 'description' => 'Upper Box A'],
+            ['name' => 'GEN AD', 'description' => 'General Admission'],
+        ];
+
+        $ticketTypeIds = [];
+        foreach ($ticketTypesData as $data) {
+            $ticketType = TicketType::firstOrCreate(
+                ['name' => $data['name']],
+                ['description' => $data['description']]
+            );
+            $ticketTypeIds[] = $ticketType->id;
+        }
 
         $concerts = [
             [
@@ -25,6 +51,10 @@ class ConcertSeeder extends Seeder
                 'artist' => 'BLACKPINK',
                 'date' => '2026-12-01',
                 'time' => '19:00:00',
+                'venue_id' => $manilaVenue->id,
+                'ticket_types' => ['VIP Standing', 'UBB', 'LBB', 'GEN AD'],
+                'prices' => [15000.00, 6500.00, 8000.00, 800.00],
+                'colors' => ['#FFD700', '#1E90FF', '#32CD32', '#F4A460'],
             ],
             [
                 'title' => 'Permission to Dance On Stage Manila',
@@ -32,6 +62,10 @@ class ConcertSeeder extends Seeder
                 'artist' => 'BTS',
                 'date' => '2026-12-08',
                 'time' => '19:00:00',
+                'venue_id' => $manilaVenue->id,
+                'ticket_types' => ['VIP Standing', 'VIP Seated', 'LBA', 'UBA', 'GEN AD'],
+                'prices' => [18000.00, 12000.00, 6000.00, 4500.00, 1000.00],
+                'colors' => ['#FFD700', '#FF6347', '#A020F0', '#00CED1', '#F4A460'],
             ],
             [
                 'title' => 'BINIverse Concert',
@@ -39,6 +73,10 @@ class ConcertSeeder extends Seeder
                 'artist' => 'BINI',
                 'date' => '2026-12-15',
                 'time' => '20:00:00',
+                'venue_id' => $manilaVenue->id,
+                'ticket_types' => ['VIP Standing', 'UBB', 'LBB', 'GEN AD'],
+                'prices' => [12000.00, 5500.00, 7000.00, 600.00],
+                'colors' => ['#FFD700', '#1E90FF', '#32CD32', '#F4A460'],
             ],
             [
                 'title' => 'Pagtatag! World Tour Manila',
@@ -46,6 +84,10 @@ class ConcertSeeder extends Seeder
                 'artist' => 'SB19',
                 'date' => '2026-12-22',
                 'time' => '19:00:00',
+                'venue_id' => $manilaVenue->id,
+                'ticket_types' => ['VIP Standing', 'VIP Seated', 'LBA', 'UBA', 'GEN AD'],
+                'prices' => [16000.00, 11000.00, 5500.00, 4000.00, 900.00],
+                'colors' => ['#FFD700', '#FF6347', '#A020F0', '#00CED1', '#F4A460'],
             ],
             [
                 'title' => 'Follow Tour Manila',
@@ -53,30 +95,49 @@ class ConcertSeeder extends Seeder
                 'artist' => 'SEVENTEEN',
                 'date' => '2027-01-05',
                 'time' => '19:00:00',
+                'venue_id' => $manilaVenue->id,
+                'ticket_types' => ['VIP Standing', 'UBB', 'LBB', 'GEN AD'],
+                'prices' => [17000.00, 7000.00, 8500.00, 900.00],
+                'colors' => ['#FFD700', '#1E90FF', '#32CD32', '#F4A460'],
             ],
         ];
 
         foreach ($concerts as $concertData) {
-            $concert = Concert::create([
-                'title' => $concertData['title'],
-                'description' => $concertData['description'],
-                'artist' => $concertData['artist'],
-                'venue_id' => $venueId,
-                'date' => $concertData['date'],
-                'time' => $concertData['time'],
-                'poster_url' => null,
-            ]);
+            // Update existing concert fields and ensure ticket pricing is refreshed.
+            $concert = Concert::updateOrCreate(
+                ['title' => $concertData['title'], 'date' => $concertData['date']],
+                [
+                    'description' => $concertData['description'],
+                    'artist' => $concertData['artist'],
+                    'venue_id' => $concertData['venue_id'],
+                    'time' => $concertData['time'],
+                    'poster_url' => null,
+                ]
+            );
 
-            // Create default ticket prices for new types
-            $ticketTypes = ['VIP Standing', 'Lower Box B (LBB)', 'Upper Box B (UBB)', 'General Admission (Gen Ad)'];
-            $defaultPrices = [250.00, 150.00, 100.00, 75.00];
+            ConcertTicketType::where('concert_id', $concert->id)->delete();
 
-            foreach ($ticketTypes as $index => $type) {
-                TicketPrice::create([
-                    'concert_id' => $concert->id,
-                    'section' => $type,
-                    'price' => $defaultPrices[$index],
-                ]);
+            $ticketTypes = $concertData['ticket_types'];
+            $prices = $concertData['prices'];
+            $colors = $concertData['colors'];
+            $venueCapacity = $concert->venue->capacity;
+            $typeCount = count($ticketTypes);
+            $baseQuantity = intdiv($venueCapacity, $typeCount);
+            $remainder = $venueCapacity % $typeCount;
+
+            foreach ($ticketTypes as $index => $ticketTypeName) {
+                $ticketType = TicketType::where('name', $ticketTypeName)->first();
+                if ($ticketType) {
+                    $quantity = $baseQuantity + ($index < $remainder ? 1 : 0);
+
+                    ConcertTicketType::create([
+                        'concert_id' => $concert->id,
+                        'ticket_type_id' => $ticketType->id,
+                        'price' => $prices[$index],
+                        'color' => $colors[$index],
+                        'quantity' => $quantity,
+                    ]);
+                }
             }
         }
     }

@@ -1,23 +1,25 @@
-# PDC Concert Ticketing - Run Guide
+# PDC Concert Ticketing - Run System Guide
 
-This guide explains how to run the system on Windows using XAMPP.
+This is the updated step-by-step guide to run the system properly on Windows using XAMPP.
 
 ## 1) Requirements
 
+Make sure these are installed:
+
 - XAMPP (Apache + MySQL)
-- PHP (version required by this Laravel project)
+- PHP (compatible with this project's Laravel version)
 - Composer
 - Node.js + npm
 
-## 2) Project Location
+## 2) Project Path
 
-Make sure the project is inside:
+The project should be located at:
 
 `C:\xampp\htdocs\PDC-3-FINALPROJ-VER3`
 
-## 3) First-Time Setup
+## 3) First-Time Setup (One-Time Only)
 
-Open terminal in the project folder, then run:
+Open a terminal in the project folder, then run:
 
 ```bash
 composer install
@@ -26,11 +28,11 @@ copy .env.example .env
 php artisan key:generate
 ```
 
-## 4) Database Setup
+## 4) Configure Database
 
-1. Start **Apache** and **MySQL** in XAMPP.
-2. Create a database in phpMyAdmin.
-3. Update DB settings in `.env`:
+1. Start **Apache** and **MySQL** in the XAMPP Control Panel.
+2. Create a database in phpMyAdmin (example: `concert_ticket_reservation_system`).
+3. Update `.env`:
 
 ```env
 DB_CONNECTION=mysql
@@ -41,65 +43,77 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-4. Run migrations (and seed if needed):
+## 5) Import Data / Run Migrations
+
+Choose one:
+
+- **Option A (recommended for fresh setup):**
 
 ```bash
-php artisan migrate
-php artisan db:seed
+php artisan migrate --seed
 ```
 
-If you already have SQL dump, import it in phpMyAdmin instead of seeding.
+- **Option B (if you already have an SQL dump):**
+  - Import the `.sql` file in phpMyAdmin
+  - Do not run `migrate --seed` if the imported database is already complete
 
-## 5) Storage Link (for uploaded images)
+## 6) Storage Link (for images)
 
-Run this once so concert images display correctly:
+Run this once so uploaded images work properly:
 
 ```bash
 php artisan storage:link
 ```
 
-## 6) Run the App
+## 7) Run the System
 
-Use two terminals:
+Use **2 terminals** in the project folder:
 
-Terminal 1 (Laravel server):
+**Terminal 1 (Laravel app server):**
 
 ```bash
 php artisan serve
 ```
 
-Terminal 2 (Vite assets):
+**Terminal 2 (Vite / CSS / JS):**
 
 ```bash
 npm run dev
 ```
 
-Open:
+Open in your browser:
 
-- App: [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- `http://127.0.0.1:8000`
 
-## 7) Quick Daily Run
+## 8) Daily Startup (Every Work Session)
 
-Every time you work:
-
-1. Start Apache + MySQL in XAMPP
-2. In project folder:
+1. Start **Apache** + **MySQL** in XAMPP
+2. In the project folder, run:
    - `php artisan serve`
    - `npm run dev`
+3. Open `http://127.0.0.1:8000`
 
-## 8) Common Fixes
+## 9) Quick Troubleshooting
 
-- **Images not showing**
-  - Run: `php artisan storage:link`
-
-- **CSS/JS not loading**
-  - Make sure `npm run dev` is running
-  - Try `npm install` again if needed
+- **Blank page / CSS or JS missing**
+  - Check if `npm run dev` is running
+  - If there is an error, run `npm install` again
 
 - **Database connection error**
-  - Recheck `.env` DB values
+  - Check the DB values in `.env`
   - Confirm MySQL is running in XAMPP
+  - Run `php artisan config:clear`
 
-- **App key error**
-  - Run: `php artisan key:generate`
+- **Application key missing**
+  - Run `php artisan key:generate`
+
+- **Images not showing**
+  - Run `php artisan storage:link`
+
+- **Class/config not updating**
+  - Run:
+
+```bash
+php artisan optimize:clear
+```
 

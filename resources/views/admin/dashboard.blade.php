@@ -26,7 +26,7 @@
                     </article>
                     <article class="ad-card">
                         <p class="ad-card-label">Revenue</p>
-                        <p class="ad-card-value">${{ number_format($metrics['revenue'], 2) }}</p>
+                        <p class="ad-card-value">₱{{ number_format($metrics['revenue'], 2) }}</p>
                         <p class="ad-card-trend">Paid transactions</p>
                     </article>
                     <article class="ad-card">
@@ -100,7 +100,7 @@
                                         <td>{{ $booking->id }}</td>
                                         <td>{{ optional($booking->concert)->title ?? 'Deleted Concert' }} - {{ optional($booking->user)->name ?? 'Deleted User' }}</td>
                                         <td>#BOOK-{{ str_pad((string)$booking->id, 6, '0', STR_PAD_LEFT) }}</td>
-                                        <td>${{ number_format((float)$booking->total_price, 2) }}</td>
+                                        <td>₱{{ number_format((float)$booking->total_price, 2) }}</td>
                                         <td>
                                             <span class="ad-status {{ $booking->status === 'confirmed' ? 'success' : ($booking->status === 'pending' ? 'pending' : 'info') }}">
                                                 {{ ucfirst($booking->status) }}

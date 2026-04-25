@@ -9,13 +9,17 @@ use App\Models\ConcertSeat;
 use App\Models\Payment;
 use App\Models\Seat;
 use App\Models\Ticket;
+use App\Services\ConcertSeatSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 
 class BookingController extends Controller
 {
+    public function __construct(private ConcertSeatSyncService $concertSeatSyncService)
+    {
+    }
+
     public function index()
     {
         $bookings = Auth::user()->bookings()
@@ -28,22 +32,48 @@ class BookingController extends Controller
 
     public function create(Concert $concert)
     {
+        $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        if (!empty($mismatches)) {
+            return back()->withErrors(['general' => 'Seat inventory is being synchronized. Please try again in a moment.']);
+        }
+
         $totalSold = $concert->bookings->sum(fn($b) => $b->tickets->count());
         $remaining = $concert->venue->capacity - $totalSold;
-        $concert->load('venue', 'ticketPrices');
+        $concert->load('venue', 'concertTicketTypes.ticketType');
         return view('bookings.create', compact('concert', 'remaining'));
     }
 
-    public function getSeats(Concert $concert)
+    public function getSeats(Request $request, Concert $concert)
     {
-        $seats = \DB::table('seats')
-            ->leftJoin('concert_seats', function($join) use ($concert) {
-                $join->on('seats.id', '=', 'concert_seats.seat_id')
-                     ->where('concert_seats.concert_id', '=', $concert->id);
-            })
+        $ticketTypeId = $request->query('concert_ticket_type_id');
+        $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        if (!empty($mismatches)) {
+            return response()->json([
+                'error' => 'Seat allocation mismatch detected. Booking is temporarily blocked until synchronization completes.',
+            ], 422);
+        }
+
+        $availableSeatsQuery = ConcertSeat::where('concert_seats.concert_id', $concert->id)
+            ->where('concert_seats.status', 'available')
+            ->join('seats', 'concert_seats.seat_id', '=', 'seats.id')
             ->where('seats.venue_id', $concert->venue_id)
-            ->select('seats.id', 'seats.seat_number', 'seats.section', 
-                    \DB::raw('COALESCE(concert_seats.status, "available") as status'))
+            ->select('seats.id', 'seats.seat_number', 'seats.section', 'concert_seats.status');
+
+        if ($ticketTypeId) {
+            $concertTicketType = $concert->concertTicketTypes()->find($ticketTypeId);
+            if (!$concertTicketType) {
+                return response()->json([]);
+            }
+
+            $seatSection = $this->getSeatSectionFromTicketType($concertTicketType->ticketType->name ?? '');
+            if ($seatSection) {
+                $availableSeatsQuery->where('seats.section', $seatSection);
+            }
+            $availableSeatsQuery->where('concert_seats.concert_ticket_type_id', $concertTicketType->id);
+        }
+
+        $seats = $availableSeatsQuery
+            ->orderBy('seats.seat_number')
             ->get();
 
         return response()->json($seats);
@@ -77,17 +107,18 @@ class BookingController extends Controller
         }
 
         $cartItems = $cartData['cart_items'];
-        $priceRecords = $concert->ticketPrices->pluck('price', 'section');
+        $cartTotals = $this->calculateCartTotals($concert, $cartItems);
+        $totalQuantity = $cartTotals['totalQuantity'];
+        $totalPrice = $cartTotals['totalPrice'];
+        $priceRecords = $cartTotals['priceRecords'];
 
-        // Calculate totals and validate
-        $totalQuantity = 0;
-        $totalPrice = 0;
         $selectedSeats = [];
 
         foreach ($cartItems as $item) {
-            $quantity = $item['quantity'] ?? 1;
-            $totalQuantity += $quantity;
-            $totalPrice += $priceRecords[$item['ticket_type']] * $quantity;
+            $ticketTypeId = $item['concert_ticket_type_id'] ?? null;
+            if (!$ticketTypeId || !isset($priceRecords[$ticketTypeId])) {
+                return redirect()->route('bookings.create', $concert)->withErrors(['cart_items' => 'Invalid ticket type selected.']);
+            }
 
             if (isset($item['seat_id'])) {
                 $selectedSeats[] = $item;
@@ -106,15 +137,16 @@ class BookingController extends Controller
         }
 
         $cartItems = $cartData['cart_items'];
-        $priceRecords = $concert->ticketPrices->pluck('price', 'section');
+        $cartTotals = $this->calculateCartTotals($concert, $cartItems);
+        $totalQuantity = $cartTotals['totalQuantity'];
+        $totalPrice = $cartTotals['totalPrice'];
+        $priceRecords = $cartTotals['priceRecords'];
 
-        // Calculate totals
-        $totalQuantity = 0;
-        $totalPrice = 0;
         foreach ($cartItems as $item) {
-            $quantity = $item['quantity'] ?? 1;
-            $totalQuantity += $quantity;
-            $totalPrice += $priceRecords[$item['ticket_type']] * $quantity;
+            $ticketTypeId = $item['concert_ticket_type_id'] ?? null;
+            if (!$ticketTypeId || !isset($priceRecords[$ticketTypeId])) {
+                return redirect()->route('bookings.create', $concert)->withErrors(['cart_items' => 'Invalid ticket type selected.']);
+            }
         }
 
         $concert->load('venue');
@@ -123,6 +155,11 @@ class BookingController extends Controller
 
     public function confirmPayment(Request $request, Concert $concert)
     {
+        $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        if (!empty($mismatches)) {
+            return back()->withErrors(['general' => 'Seat inventory mismatch detected. Please retry booking after synchronization.']);
+        }
+
         $request->validate([
             'card_number' => ['required', 'string', 'regex:/^[0-9 ]{13,19}$/'],
             'expiry' => ['required', 'string', 'regex:/^(0[1-9]|1[0-2])\/\d{2}$/'],
@@ -137,29 +174,33 @@ class BookingController extends Controller
         }
 
         $cartItems = $cartData['cart_items'];
-
-        $validTypes = ['VIP Standing', 'General Admission (Gen Ad)', 'Lower Box B (LBB)', 'Upper Box B (UBB)'];
-        $seatTypes = ['Lower Box B (LBB)', 'Upper Box B (UBB)'];
-        $priceRecords = $concert->ticketPrices->pluck('price', 'section');
+        $ticketTypes = $concert->concertTicketTypes->keyBy('id');
+        $priceRecords = $ticketTypes->mapWithKeys(fn($type) => [$type->id => $type->price])->all();
+        $seatRequiredTypes = ['VIP Seated', 'LBB', 'UBB', 'LBA', 'UBA'];
 
         $totalQuantity = 0;
         $seatItems = [];
         $autoAssignItems = [];
 
         foreach ($cartItems as $item) {
-            if (!isset($item['ticket_type']) || !in_array($item['ticket_type'], $validTypes)) {
-                return back()->withErrors(['cart_items' => 'Invalid ticket type.']);
+            $ticketTypeId = $item['concert_ticket_type_id'] ?? null;
+            if (!$ticketTypeId || !isset($ticketTypes[$ticketTypeId])) {
+                return back()->withErrors(['cart_items' => 'Invalid ticket type selected.']);
             }
 
-            $ticketType = $item['ticket_type'];
+            $concertTicketType = $ticketTypes[$ticketTypeId];
+            $ticketTypeSlug = $concertTicketType->ticketType->name ?? '';
+            $ticketTypeLabel = $concertTicketType->custom_name ?: ($concertTicketType->ticketType->description ? $concertTicketType->ticketType->description . ' (' . $ticketTypeSlug . ')' : $ticketTypeSlug);
+            $requiresSeat = in_array($ticketTypeSlug, $seatRequiredTypes, true);
 
-            if (in_array($ticketType, $seatTypes)) {
+            if ($requiresSeat) {
                 if (empty($item['seat_id'])) {
                     return back()->withErrors(['cart_items' => 'Please select a seat for each reserved ticket.']);
                 }
 
                 $seatItems[] = [
-                    'ticket_type' => $ticketType,
+                    'concert_ticket_type_id' => $ticketTypeId,
+                    'ticket_type' => $ticketTypeLabel,
                     'seat_id' => $item['seat_id'],
                 ];
                 $totalQuantity += 1;
@@ -174,7 +215,8 @@ class BookingController extends Controller
                 }
 
                 $autoAssignItems[] = [
-                    'ticket_type' => $ticketType,
+                    'concert_ticket_type_id' => $ticketTypeId,
+                    'ticket_type' => $ticketTypeLabel,
                     'quantity' => $quantity,
                 ];
                 $totalQuantity += $quantity;
@@ -196,13 +238,13 @@ class BookingController extends Controller
 
         $totalPrice = 0;
         foreach ($seatItems as $item) {
-            $totalPrice += $priceRecords[$item['ticket_type']];
+            $totalPrice += $priceRecords[$item['concert_ticket_type_id']];
         }
         foreach ($autoAssignItems as $item) {
-            $totalPrice += $priceRecords[$item['ticket_type']] * $item['quantity'];
+            $totalPrice += $priceRecords[$item['concert_ticket_type_id']] * $item['quantity'];
         }
 
-        DB::transaction(function () use ($concert, $seatItems, $autoAssignItems, $totalPrice, $priceRecords) {
+        DB::transaction(function () use ($concert, $seatItems, $autoAssignItems, $totalPrice, $totalQuantity, $priceRecords, $ticketTypes) {
             $booking = Booking::create([
                 'user_id' => Auth::id(),
                 'concert_id' => $concert->id,
@@ -211,16 +253,30 @@ class BookingController extends Controller
             ]);
 
             foreach ($seatItems as $item) {
+                $concertTicketType = $ticketTypes[$item['concert_ticket_type_id']];
+                $ticketTypeSlug = $concertTicketType->ticketType->name ?? '';
+                $ticketTypeLabel = $concertTicketType->custom_name ?: ($concertTicketType->ticketType->description ? $concertTicketType->ticketType->description . ' (' . $ticketTypeSlug . ')' : $ticketTypeSlug);
+                $seatSection = $this->getSeatSectionFromTicketType($ticketTypeSlug);
+
                 $seat = Seat::find($item['seat_id']);
-                if (!$seat || $seat->section !== $item['ticket_type']) {
+                if (!$seat || $seat->venue_id !== $concert->venue_id || ($seatSection !== null && $seat->section !== $seatSection)) {
                     throw new \Exception('Invalid seat selection.');
                 }
 
-                $concertSeat = ConcertSeat::where('concert_id', $concert->id)
-                    ->where('seat_id', $item['seat_id'])
-                    ->first();
+                $concertSeat = ConcertSeat::firstOrCreate([
+                    'concert_id' => $concert->id,
+                    'seat_id' => $item['seat_id'],
+                ], [
+                    'concert_ticket_type_id' => $item['concert_ticket_type_id'],
+                    'status' => 'available',
+                ]);
 
-                if (!$concertSeat || $concertSeat->status !== 'available') {
+                if ($concertSeat->concert_ticket_type_id === null) {
+                    $concertSeat->concert_ticket_type_id = $item['concert_ticket_type_id'];
+                    $concertSeat->save();
+                }
+
+                if ((int) $concertSeat->concert_ticket_type_id !== (int) $item['concert_ticket_type_id'] || $concertSeat->status !== 'available') {
                     throw new \Exception('Seat no longer available');
                 }
 
@@ -228,34 +284,103 @@ class BookingController extends Controller
 
                 Ticket::create([
                     'booking_id' => $booking->id,
+                    'concert_ticket_type_id' => $item['concert_ticket_type_id'],
                     'seat_id' => $item['seat_id'],
-                    'ticket_type' => $item['ticket_type'],
-                    'price_at_purchase' => $priceRecords[$item['ticket_type']],
+                    'ticket_type' => $ticketTypeLabel,
+                    'price_at_purchase' => $priceRecords[$item['concert_ticket_type_id']],
                     'qr_code' => uniqid(),
                 ]);
             }
 
             foreach ($autoAssignItems as $item) {
-                $availableSeats = ConcertSeat::where('concert_id', $concert->id)
-                    ->where('status', 'available')
-                    ->inRandomOrder()
-                    ->limit($item['quantity'])
-                    ->get();
+                $concertTicketType = $ticketTypes[$item['concert_ticket_type_id']];
+                $ticketTypeSlug = $concertTicketType->ticketType->name ?? '';
+                $ticketTypeLabel = $concertTicketType->custom_name ?: ($concertTicketType->ticketType->description ? $concertTicketType->ticketType->description . ' (' . $ticketTypeSlug . ')' : $ticketTypeSlug);
+                $seatSection = $this->getSeatSectionFromTicketType($ticketTypeSlug);
+                // VIP Standing has no seats
 
-                if ($availableSeats->count() < $item['quantity']) {
-                    throw new \Exception('Not enough seats available');
-                }
+                if ($ticketTypeSlug === 'VIP Standing') {
+                    // No seats for VIP Standing
+                    for ($i = 0; $i < $item['quantity']; $i++) {
+                        Ticket::create([
+                            'booking_id' => $booking->id,
+                            'concert_ticket_type_id' => $item['concert_ticket_type_id'],
+                            'seat_id' => null, // No seat assigned
+                            'ticket_type' => $ticketTypeLabel,
+                            'price_at_purchase' => $priceRecords[$item['concert_ticket_type_id']],
+                            'qr_code' => uniqid(),
+                        ]);
+                    }
+                } else {
+                    // Assign seats for other types
+                    $availableSeatsQuery = ConcertSeat::where('concert_id', $concert->id)
+                        ->where('status', 'available')
+                        ->where('concert_ticket_type_id', $item['concert_ticket_type_id']);
 
-                foreach ($availableSeats as $concertSeat) {
-                    $concertSeat->update(['status' => 'reserved']);
+                    if ($seatSection) {
+                        $availableSeatsQuery->whereHas('seat', function ($query) use ($seatSection) {
+                            $query->where('section', $seatSection);
+                        });
+                    }
 
-                    Ticket::create([
-                        'booking_id' => $booking->id,
-                        'seat_id' => $concertSeat->seat_id,
-                        'ticket_type' => $item['ticket_type'],
-                        'price_at_purchase' => $priceRecords[$item['ticket_type']],
-                        'qr_code' => uniqid(),
-                    ]);
+                    if ($ticketTypeSlug === 'GEN AD' && $item['quantity'] >= 3) {
+                        // For GEN AD with 3+ tickets, assign consecutive seats
+                        $availableSeats = $availableSeatsQuery
+                            ->join('seats', 'concert_seats.seat_id', '=', 'seats.id')
+                            ->orderBy('seats.seat_number')
+                            ->select('concert_seats.*')
+                            ->get();
+
+                        // Find consecutive seats
+                        $consecutiveSeats = [];
+                        $currentConsecutive = [];
+                        
+                        foreach ($availableSeats as $concertSeat) {
+                            $seatNumber = (int) $concertSeat->seat->seat_number;
+                            
+                            if (empty($currentConsecutive)) {
+                                $currentConsecutive[] = $concertSeat;
+                            } elseif ((int) end($currentConsecutive)->seat->seat_number + 1 === $seatNumber) {
+                                $currentConsecutive[] = $concertSeat;
+                                if (count($currentConsecutive) >= $item['quantity']) {
+                                    $consecutiveSeats = array_slice($currentConsecutive, -$item['quantity']);
+                                    break;
+                                }
+                            } else {
+                                $currentConsecutive = [$concertSeat];
+                            }
+                        }
+
+                        if (count($consecutiveSeats) >= $item['quantity']) {
+                            $availableSeats = collect($consecutiveSeats);
+                        } else {
+                            // Fallback to random if no consecutive seats found
+                            $availableSeats = $availableSeatsQuery->inRandomOrder()
+                                ->limit($item['quantity'])
+                                ->get();
+                        }
+                    } else {
+                        $availableSeats = $availableSeatsQuery->inRandomOrder()
+                            ->limit($item['quantity'])
+                            ->get();
+                    }
+
+                    if ($availableSeats->count() < $item['quantity']) {
+                        throw new \Exception('Not enough seats available');
+                    }
+
+                    foreach ($availableSeats as $concertSeat) {
+                        $concertSeat->update(['status' => 'reserved']);
+
+                        Ticket::create([
+                            'booking_id' => $booking->id,
+                            'concert_ticket_type_id' => $item['concert_ticket_type_id'],
+                            'seat_id' => $concertSeat->seat_id,
+                            'ticket_type' => $ticketTypeLabel,
+                            'price_at_purchase' => $priceRecords[$item['concert_ticket_type_id']],
+                            'qr_code' => uniqid(),
+                        ]);
+                    }
                 }
             }
 
@@ -307,5 +432,40 @@ class BookingController extends Controller
         $booking->load('concert.venue', 'payment');
         $tickets = $booking->tickets()->with('seat')->paginate(1);
         return view('bookings.show', compact('booking', 'tickets'));
+    }
+
+    private function calculateCartTotals(Concert $concert, array $cartItems): array
+    {
+        $ticketTypes = $concert->concertTicketTypes->keyBy('id');
+        $priceRecords = $ticketTypes->mapWithKeys(fn($type) => [$type->id => $type->price])->all();
+
+        $totalQuantity = 0;
+        $totalPrice = 0;
+
+        foreach ($cartItems as $item) {
+            $ticketTypeId = $item['concert_ticket_type_id'] ?? null;
+            $quantity = $item['quantity'] ?? 1;
+            $totalQuantity += $quantity;
+            $totalPrice += $priceRecords[$ticketTypeId] * $quantity;
+        }
+
+        return [
+            'totalQuantity' => $totalQuantity,
+            'totalPrice' => $totalPrice,
+            'priceRecords' => $priceRecords,
+        ];
+    }
+
+    private function getSeatSectionFromTicketType(string $ticketTypeSlug): ?string
+    {
+        return match ($ticketTypeSlug) {
+            'VIP Seated' => 'VIP Seated',
+            'LBB' => 'Lower Box B (LBB)',
+            'UBB' => 'Upper Box B (UBB)',
+            'LBA' => 'Lower Box A (LBA)',
+            'UBA' => 'Upper Box A (UBA)',
+            'Gen Ad', 'GEN AD' => 'General Admission (Gen Ad)',
+            default => null,
+        };
     }
 }

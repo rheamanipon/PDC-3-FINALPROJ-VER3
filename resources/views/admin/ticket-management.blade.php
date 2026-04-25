@@ -31,10 +31,11 @@
                             </thead>
                             <tbody>
                                 @forelse($ticketStats as $stat)
-                                    @php($remaining = max($stat->allocated_seats - $stat->sold_seats, 0))
+                                    @php($allocation = $stat->venue->capacity ?? $stat->allocated_seats)
+                                    @php($remaining = max($allocation - $stat->sold_seats, 0))
                                     <tr>
                                         <td>{{ $stat->title }}</td>
-                                        <td>{{ number_format($stat->allocated_seats) }}</td>
+                                        <td>{{ number_format($allocation) }}</td>
                                         <td>{{ number_format($stat->sold_seats) }}</td>
                                         <td>{{ number_format($remaining) }}</td>
                                     </tr>

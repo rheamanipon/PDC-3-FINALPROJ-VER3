@@ -13,8 +13,13 @@
 }
 
 .dashboard-title {
-    font-size: 3.2rem;
-    margin-bottom: 0.35rem;
+    font-size: 2.5rem;
+}
+
+@media (min-width: 768px) {
+    .dashboard-title {
+        font-size: 3.2rem;
+    }
 }
 
 .dashboard-subtitle {
@@ -25,9 +30,15 @@
 
 .user-dashboard-metrics {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 1rem;
     margin-bottom: 1.35rem;
+}
+
+@media (min-width: 640px) {
+    .user-dashboard-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .dashboard-metric-card {
@@ -69,8 +80,14 @@
 
 .user-dashboard-panels {
     display: grid;
-    grid-template-columns: 1fr 1.2fr;
+    grid-template-columns: 1fr;
     gap: 1rem;
+}
+
+@media (min-width: 768px) {
+    .user-dashboard-panels {
+        grid-template-columns: 1fr 1.2fr;
+    }
 }
 
 .dashboard-panel .card-header {

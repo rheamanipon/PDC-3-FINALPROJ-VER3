@@ -10,27 +10,45 @@ class SeatSeeder extends Seeder
 {
     public function run(): void
     {
-        $venue = Venue::first(); // Madison Square Garden
+        $venues = Venue::all();
 
-        if (!$venue) {
-            return;
-        }
+        foreach ($venues as $venue) {
+            // Base seat counts per section
+            $baseSections = [
+                'VIP Seated' => 20,
+                'Lower Box B (LBB)' => 50,
+                'Upper Box B (UBB)' => 100,
+                'Lower Box A (LBA)' => 50,
+                'Upper Box A (UBA)' => 50,
+                'General Admission (Gen Ad)' => 30,
+            ];
 
-        // Create seats for different sections
-        $sections = [
-            'VIP Standing' => ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10'],
-            'Lower Box B (LBB)' => range(1, 50), // 50 seats
-            'Upper Box B (UBB)' => range(1, 100), // 100 seats
-            'General Admission (Gen Ad)' => range(1, 140), // 140 seats
-        ];
+            $totalBaseSeats = array_sum($baseSections);
+            $scale = $venue->capacity / $totalBaseSeats;
 
-        foreach ($sections as $section => $seats) {
-            foreach ($seats as $seatNumber) {
-                Seat::create([
-                    'venue_id' => $venue->id,
-                    'seat_number' => (string) $seatNumber,
-                    'section' => $section,
-                ]);
+            // Scale seat counts to match venue capacity
+            $sections = [];
+            foreach ($baseSections as $section => $count) {
+                $sections[$section] = range(1, (int) round($count * $scale));
+            }
+
+            $seats = [];
+            foreach ($sections as $section => $seatNumbers) {
+                foreach ($seatNumbers as $seatNumber) {
+                    $seats[] = [
+                        'venue_id' => $venue->id,
+                        'seat_number' => (string) $seatNumber,
+                        'section' => $section,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+            }
+
+            // Bulk insert for better performance, in chunks
+            $chunks = array_chunk($seats, 1000);
+            foreach ($chunks as $chunk) {
+                Seat::insert($chunk);
             }
         }
     }

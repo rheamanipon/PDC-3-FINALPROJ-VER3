@@ -14,6 +14,12 @@ class VenueSeeder extends Seeder
             'location' => 'New York, NY',
             'capacity' => 300,
         ]);
+
+        Venue::create([
+            'name' => 'Araneta Coliseum',
+            'location' => 'Quezon City, Manila, Philippines',
+            'capacity' => 25000,
+        ]);
     }
 }
 

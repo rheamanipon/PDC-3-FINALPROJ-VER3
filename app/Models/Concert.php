@@ -34,14 +34,19 @@ class Concert extends Model
         return $this->hasMany(Booking::class);
     }
 
-    public function ticketPrices()
-    {
-        return $this->hasMany(TicketPrice::class);
-    }
-
     public function concertSeats()
     {
         return $this->hasMany(ConcertSeat::class);
+    }
+
+    public function concertTicketTypes()
+    {
+        return $this->hasMany(ConcertTicketType::class);
+    }
+
+    public function ticketPrices()
+    {
+        return $this->hasMany(ConcertTicketType::class);
     }
 
 

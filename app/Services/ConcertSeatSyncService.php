@@ -10,18 +10,18 @@ use Illuminate\Support\Facades\DB;
 
 class ConcertSeatSyncService
 {
-    public function syncConcert(Concert $concert): void
+    public function syncConcert(Concert $concert, bool $allowCreateAssignments = true): void
     {
         $concert->loadMissing('concertTicketTypes.ticketType', 'venue.seats');
 
-        DB::transaction(function () use ($concert) {
-            $this->normalizeConcertSeatInventory($concert);
+        DB::transaction(function () use ($concert, $allowCreateAssignments) {
+            $this->normalizeConcertSeatInventory($concert, $allowCreateAssignments);
 
             foreach ($concert->concertTicketTypes as $concertTicketType) {
                 $section = $this->getSeatSectionFromTicketType($concertTicketType->ticketType->name ?? '');
                 $expected = $section ? (int) $concertTicketType->quantity : 0;
 
-                $this->syncTicketTypeSeats($concert, $concertTicketType->id, $section, $expected);
+                $this->syncTicketTypeSeats($concert, $concertTicketType->id, $section, $expected, $allowCreateAssignments);
             }
         });
     }
@@ -64,7 +64,7 @@ class ConcertSeatSyncService
         return $mismatches;
     }
 
-    private function syncTicketTypeSeats(Concert $concert, int $concertTicketTypeId, ?string $section, int $expected): void
+    private function syncTicketTypeSeats(Concert $concert, int $concertTicketTypeId, ?string $section, int $expected, bool $allowCreateAssignments): void
     {
         $baseQuery = ConcertSeat::where('concert_id', $concert->id)
             ->where('concert_ticket_type_id', $concertTicketTypeId)
@@ -75,13 +75,14 @@ class ConcertSeatSyncService
         $actual = (clone $baseQuery)->count();
 
         if ($actual < $expected) {
+            if (!$allowCreateAssignments) {
+                throw new \RuntimeException('Seat allocation cannot be expanded during ticket-type edits.');
+            }
+
             $missing = $expected - $actual;
             $availableVenueSeats = $this->getUnassignedVenueSeatsForConcert($concert->id, $concert->venue_id, $section, $missing);
-
             if ($availableVenueSeats->count() < $missing) {
-                $needed = $missing - $availableVenueSeats->count();
-                $generatedSeats = $this->generateVenueSeats($concert->venue_id, $section ?? 'AUTO', $needed);
-                $availableVenueSeats = $availableVenueSeats->concat($generatedSeats);
+                throw new \RuntimeException('Seat allocation exceeds available venue seats.');
             }
 
             foreach ($availableVenueSeats->take($missing) as $seat) {
@@ -115,7 +116,7 @@ class ConcertSeatSyncService
         }
     }
 
-    private function normalizeConcertSeatInventory(Concert $concert): void
+    private function normalizeConcertSeatInventory(Concert $concert, bool $allowCreateAssignments): void
     {
         $activeTicketTypeIds = $concert->concertTicketTypes->pluck('id');
 
@@ -152,6 +153,28 @@ class ConcertSeatSyncService
             ->whereNotIn('concert_ticket_type_id', $activeTicketTypeIds)
             ->where('status', 'available')
             ->delete();
+
+        $this->removeDuplicateAvailableSeats($concert->id);
+
+        $assignedSeatCount = ConcertSeat::where('concert_id', $concert->id)->count();
+        if ($assignedSeatCount > (int) $concert->venue->capacity) {
+            if (!$allowCreateAssignments) {
+                throw new \RuntimeException('Seat count exceeds venue capacity and cannot be auto-expanded during edit.');
+            }
+
+            $overflow = $assignedSeatCount - (int) $concert->venue->capacity;
+            $trimCandidateIds = ConcertSeat::where('concert_id', $concert->id)
+                ->where('status', 'available')
+                ->orderByDesc('id')
+                ->limit($overflow)
+                ->pluck('id');
+
+            if ($trimCandidateIds->count() < $overflow) {
+                throw new \RuntimeException('Concert seat count exceeds venue capacity and cannot be safely trimmed.');
+            }
+
+            ConcertSeat::whereIn('id', $trimCandidateIds)->delete();
+        }
     }
 
     private function getUnassignedVenueSeatsForConcert(int $concertId, int $venueId, ?string $section, int $limit): Collection
@@ -173,30 +196,42 @@ class ConcertSeatSyncService
             ->get();
     }
 
-    private function generateVenueSeats(int $venueId, string $section, int $count): Collection
+    private function removeDuplicateAvailableSeats(int $concertId): void
     {
-        if ($count <= 0) {
-            return collect();
+        $duplicateSeatIds = ConcertSeat::where('concert_id', $concertId)
+            ->select('seat_id')
+            ->groupBy('seat_id')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('seat_id');
+
+        foreach ($duplicateSeatIds as $seatId) {
+            $duplicates = ConcertSeat::where('concert_id', $concertId)
+                ->where('seat_id', $seatId)
+                ->orderByRaw("CASE WHEN status = 'available' THEN 1 ELSE 0 END ASC")
+                ->orderBy('id')
+                ->get();
+
+            $keeper = $duplicates->first();
+            if (!$keeper) {
+                continue;
+            }
+
+            $deletableIds = $duplicates
+                ->filter(fn (ConcertSeat $concertSeat) => $concertSeat->id !== $keeper->id && $concertSeat->status === 'available')
+                ->pluck('id');
+
+            if ($deletableIds->isNotEmpty()) {
+                ConcertSeat::whereIn('id', $deletableIds)->delete();
+            }
+
+            $remainingCount = ConcertSeat::where('concert_id', $concertId)
+                ->where('seat_id', $seatId)
+                ->count();
+
+            if ($remainingCount > 1) {
+                throw new \RuntimeException('Concert has duplicate sold/reserved seat rows and requires manual cleanup.');
+            }
         }
-
-        $existingSeatNumbers = Seat::where('venue_id', $venueId)
-            ->where('section', $section)
-            ->pluck('seat_number');
-
-        $maxSeatNumber = $existingSeatNumbers
-            ->map(fn($number) => is_numeric($number) ? (int) $number : 0)
-            ->max() ?? 0;
-
-        $newSeats = collect();
-        for ($i = 1; $i <= $count; $i++) {
-            $newSeats->push(Seat::create([
-                'venue_id' => $venueId,
-                'seat_number' => (string) ($maxSeatNumber + $i),
-                'section' => $section,
-            ]));
-        }
-
-        return $newSeats;
     }
 
     private function getSeatSectionFromTicketType(string $ticketTypeSlug): ?string

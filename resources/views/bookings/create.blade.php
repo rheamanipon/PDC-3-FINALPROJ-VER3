@@ -330,10 +330,11 @@
 
                 visibleSeats.forEach(seat => {
                     const isSelected = cartItems.some(item => item.seat_id == seat.id);
+                    const seatLabel = `${seat.section} - Seat ${seat.seat_number}`;
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.style.cssText = 'width: 100%; text-align: left; padding: 0.75rem 1rem; border: none; border-bottom: 1px solid rgba(148,163,184,0.12); background: transparent; color: var(--text-primary); cursor: pointer; transition: background 150ms ease;';
-                    button.textContent = `Seat ${seat.seat_number}`;
+                    button.textContent = seatLabel;
 
                     if (seat.status !== 'available') {
                         button.disabled = true;
@@ -347,8 +348,8 @@
                         button.textContent += ' — Selected';
                     } else {
                         button.addEventListener('click', () => {
-                            seatDropdownHidden.value = JSON.stringify({ id: seat.id, number: seat.seat_number });
-                            seatDropdownToggle.textContent = `Seat ${seat.seat_number}`;
+                            seatDropdownHidden.value = JSON.stringify({ id: seat.id, number: seat.seat_number, section: seat.section });
+                            seatDropdownToggle.textContent = seatLabel;
                             seatDropdownPanel.style.display = 'none';
                         });
                         button.addEventListener('mouseenter', () => {
@@ -459,7 +460,8 @@
                         concert_ticket_type_id: type,
                         ticket_type: ticketSection,
                         seat_id: seatData.id,
-                        seat_number: seatData.number
+                        seat_number: seatData.number,
+                        seat_section: seatData.section
                     });
                     populateSeatDropdown();
                 } else {
@@ -501,7 +503,9 @@
                         
                         const ticketInfo = document.createElement('span');
                         ticketInfo.style.cssText = 'font-weight: 600; color: var(--text-primary); flex: 1; font-size: 0.95rem;';
-                        ticketInfo.textContent = item.quantity ? `${item.quantity} × ${item.ticket_type}` : `${item.ticket_type} - Seat ${item.seat_number}`;
+                        ticketInfo.textContent = item.quantity
+                            ? `${item.quantity} × ${item.ticket_type}`
+                            : `${item.ticket_type} - ${item.seat_section || 'Seat'} ${item.seat_number}`;
                         
                         const removeBtn = document.createElement('button');
                         removeBtn.type = 'button';
@@ -550,10 +554,14 @@
                 }, 0);
 
                 const details = cartItems.map(item => {
-                    return item.quantity ? `${item.quantity} × ${item.ticket_type}` : `${item.ticket_type} - Seat ${item.seat_number}`;
+                    return item.quantity
+                        ? `${item.quantity} × ${item.ticket_type}`
+                        : `${item.ticket_type} - ${item.seat_section || 'Seat'} ${item.seat_number}`;
                 }).join(', ');
 
-                const seatItems = cartItems.filter(item => item.seat_id).map(item => `Seat ${item.seat_number}`);
+                const seatItems = cartItems
+                    .filter(item => item.seat_id)
+                    .map(item => `${item.seat_section || 'Seat'} ${item.seat_number}`);
 
                 totalPriceEl.textContent = `₱${total.toFixed(2)}`;
                 totalDetailsEl.textContent = details;

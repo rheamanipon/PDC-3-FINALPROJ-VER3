@@ -52,33 +52,16 @@
                             <label class="ad-label" for="description">Description</label>
                             <textarea class="ad-textarea" id="description" name="description">{{ old('description', $concert->description) }}</textarea>
                         </div>
-                        <div class="ad-field ad-field-full ad-ticket-pricing-panel" style="border: 1px solid rgba(255,255,255,0.08); padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; background: rgba(255,255,255,0.02);">
+                        <div class="ad-field ad-field-full ad-ticket-pricing-panel" style="border: 1px solid rgba(255,255,255,0.08); padding: 0.75rem; margin-bottom: 0.75rem; border-radius: 0.5rem; background: rgba(255,255,255,0.02);">
                             <h3 class="ad-panel-title" style="margin-bottom: 0.75rem;">Ticket Pricing & Types</h3>
-                            <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 1rem;">Edit the ticket type breakdown for this concert. Ticket quantities are auto-distributed to match venue capacity.</p>
-
-                            <div class="ad-grid-3" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; align-items: end; margin-bottom: 1rem;">
-                                <div>
-                                    <label class="ad-label" for="ticket_type_select">Ticket Type</label>
-                                    <select class="ad-select" id="ticket_type_select" aria-label="Ticket type">
-                                        <option value="">Select ticket type</option>
-                                        @foreach($ticketTypes as $type)
-                                            <option value="{{ $type->id }}">{{ $type->name }}{{ $type->description ? ' — '.$type->description : '' }}</option>
-                                        @endforeach
-                                    </select>
+                            <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.75rem;">
+                                Edit existing ticket prices and colors only. Ticket quantities and type assignments stay fixed to prevent seat duplication.
+                            </p>
+                            @if($hasSoldTickets)
+                                <div style="margin-bottom: 0.75rem; padding: 0.6rem 0.8rem; border: 1px solid rgba(248,113,113,0.4); border-radius: 0.5rem; background: rgba(248,113,113,0.08); color: #fecaca;">
+                                    Ticket pricing/types are locked because tickets have already been sold for this concert.
                                 </div>
-                                <div>
-                                    <label class="ad-label" for="ticket_price_input">Price (PHP)</label>
-                                    <input class="ad-input" id="ticket_price_input" type="number" min="0" step="0.01" placeholder="0.00" aria-label="Ticket price">
-                                </div>
-                                <div>
-                                    <label class="ad-label" for="ticket_color_input">Ticket Color</label>
-                                    <input class="ad-input" id="ticket_color_input" type="color" value="#ff6600" aria-label="Ticket color" style="width: 100%; height: 3rem; padding: 0.2rem;">
-                                </div>
-                            </div>
-
-                            <div class="ad-field ad-field-full" style="margin-bottom: 1rem;">
-                                <button type="button" id="add_ticket_type_btn" class="ad-btn ad-btn-secondary" style="width: 100%;">Add Ticket Type</button>
-                            </div>
+                            @endif
 
                             <div id="ticket_types_list" style="display: grid; gap: 0.75rem;"></div>
 
@@ -98,10 +81,24 @@
                                 <p style="color: #f87171; font-size: 0.9rem; margin-top: 0.75rem;">Please provide a valid color code.</p>
                             @enderror
                         </div>
-                        @if($concert->poster_url)
-                            <div class="ad-field ad-field-full">
-                                <label class="ad-label">Current Poster</label>
-                                <img class="ad-poster" src="{{ asset('storage/'.$concert->poster_url) }}" alt="{{ $concert->title }} poster">
+                        @if($concert->poster_url || $concert->seat_plan_image)
+                            <div class="ad-field ad-field-full" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start;">
+                                <div style="display: grid; gap: 0.5rem;">
+                                    <label class="ad-label">Current Poster</label>
+                                    @if($concert->poster_url)
+                                        <img src="{{ asset('storage/'.$concert->poster_url) }}" alt="{{ $concert->title }} poster" style="width: 100%; height: auto; max-height: 28rem; object-fit: contain; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; padding: 0.5rem;">
+                                    @else
+                                        <div style="width: 100%; min-height: 14rem; display: grid; place-items: center; color: #94a3b8; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem;">No poster uploaded</div>
+                                    @endif
+                                </div>
+                                <div style="display: grid; gap: 0.5rem;">
+                                    <label class="ad-label">Current Seat Plan</label>
+                                    @if($concert->seat_plan_image)
+                                        <img src="{{ asset('storage/'.$concert->seat_plan_image) }}" alt="{{ $concert->title }} seat plan" style="width: 100%; height: auto; max-height: 28rem; object-fit: contain; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; padding: 0.5rem;">
+                                    @else
+                                        <div style="width: 100%; min-height: 14rem; display: grid; place-items: center; color: #94a3b8; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem;">No seat plan uploaded</div>
+                                    @endif
+                                </div>
                             </div>
                         @endif
                         <div class="ad-field ad-field-full">
@@ -139,118 +136,80 @@
     <script>
         const ticketTypes = @json($ticketTypesJson);
         const existingTicketTypes = @json($existingTicketTypesJson);
+        const hasSoldTickets = @json($hasSoldTickets);
 
-        const ticketTypeSelect = document.getElementById('ticket_type_select');
-        const ticketPriceInput = document.getElementById('ticket_price_input');
-        const ticketColorInput = document.getElementById('ticket_color_input');
-        const addTicketTypeBtn = document.getElementById('add_ticket_type_btn');
         const ticketTypesList = document.getElementById('ticket_types_list');
-        const venueSelect = document.getElementById('venue_id');
-
         let selectedTicketTypes = existingTicketTypes.map((ticket) => ({
             id: ticket.id,
-            ticket_type_id: ticket.ticket_type_id,
-            price: ticket.price,
-            quantity: ticket.quantity ?? 0,
-            color: ticket.color,
+            ticket_type_id: Number(ticket.ticket_type_id),
+            price: Number(ticket.price),
+            quantity: Number(ticket.quantity ?? 0),
+            color: ticket.color || '#ff6600',
         }));
-
-        function getVenueCapacity() {
-            const venueId = venueSelect.value;
-            const venuesData = @json($venues->map(fn($v) => ['id' => $v->id, 'capacity' => $v->capacity])->values());
-            const venue = venuesData.find(v => v.id == venueId);
-            return venue ? venue.capacity : 0;
-        }
-
-        function calculateQuantities(typeCount) {
-            const capacity = getVenueCapacity();
-            if (!capacity || typeCount === 0) return [];
-
-            const baseQty = Math.floor(capacity / typeCount);
-            const remainder = capacity % typeCount;
-            const quantities = [];
-
-            for (let i = 0; i < typeCount; i++) {
-                quantities.push(baseQty + (i < remainder ? 1 : 0));
-            }
-            return quantities;
-        }
 
         function renderTicketTypes() {
             ticketTypesList.innerHTML = '';
-            const quantities = calculateQuantities(selectedTicketTypes.length);
 
             selectedTicketTypes.forEach((ticket, index) => {
                 const ticketType = ticketTypes.find((type) => type.id === Number(ticket.ticket_type_id));
                 const label = ticketType ? `${ticketType.name}${ticketType.description ? ' — ' + ticketType.description : ''}` : 'Selected ticket';
-                const quantity = quantities[index] || 0;
-                ticket.quantity = quantity;
 
                 const row = document.createElement('div');
                 row.className = 'ad-field';
-                row.style = 'display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; padding: 1rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; background: rgba(255,255,255,0.02);';
+                row.style = 'display: grid; grid-template-columns: 1fr; gap: 0.65rem; align-items: center; padding: 0.65rem 0.8rem; border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; background: rgba(255,255,255,0.02);';
                 row.innerHTML = `
                     <div>
-                        <p style="margin: 0 0 0.25rem; font-weight: 700;">${label}</p>
-                        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; align-items: center;">
-                            <div style="font-size: 0.95rem; color: #cbd5e1;">Price: ₱${Number(ticket.price).toFixed(2)}</div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #cbd5e1;"><span style="width: 1rem; height: 1rem; display: inline-block; border-radius: 9999px; background: ${ticket.color};"></span>Color</div>
+                        <p style="margin: 0 0 0.2rem; font-weight: 700; font-size: 0.95rem;">${label}</p>
+                        <p style="margin: 0 0 0.5rem; font-size: 0.82rem; color: #94a3b8;">Allocated seats: ${ticket.quantity}</p>
+                        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; align-items: end;">
+                            <div>
+                                <label class="ad-label" style="margin-bottom: 0.25rem; font-size: 0.75rem;">Price (PHP)</label>
+                                <input class="ad-input" type="number" min="0" step="0.01" value="${Number(ticket.price).toFixed(2)}" ${hasSoldTickets ? 'disabled' : ''} data-action="price" data-index="${index}" style="padding: 0.5rem 0.7rem; min-height: 2.2rem; font-size: 0.9rem;">
+                            </div>
+                            <div>
+                                <label class="ad-label" style="margin-bottom: 0.25rem; font-size: 0.75rem;">Color</label>
+                                <input class="ad-input" type="color" value="${ticket.color}" ${hasSoldTickets ? 'disabled' : ''} data-action="color" data-index="${index}" style="width: 100%; height: 2.2rem; padding: 0.1rem;">
+                            </div>
                         </div>
-                    </div>
-                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
-                        <button type="button" class="ad-btn ad-btn-secondary" style="padding: 0.6rem 1rem;" onclick="removeTicketType(${index})">Remove</button>
                     </div>
                     <input type="hidden" name="ticket_types[${index}][id]" value="${ticket.id}">
                     <input type="hidden" name="ticket_types[${index}][ticket_type_id]" value="${ticket.ticket_type_id}">
-                    <input type="hidden" name="ticket_types[${index}][price]" value="${ticket.price}">
+                    <input type="hidden" name="ticket_types[${index}][price]" value="${Number(ticket.price).toFixed(2)}">
                     <input type="hidden" name="ticket_types[${index}][quantity]" value="${ticket.quantity}">
                     <input type="hidden" name="ticket_types[${index}][color]" value="${ticket.color}">
                 `;
                 ticketTypesList.appendChild(row);
             });
-        }
 
-        function addTicketType() {
-            const selectedTypeId = ticketTypeSelect.value;
-            const price = ticketPriceInput.value;
-            const color = ticketColorInput.value;
-
-            if (!selectedTypeId) {
-                alert('Please select a ticket type');
-                return;
-            }
-            if (price === '' || Number(price) < 0) {
-                alert('Please enter a valid ticket price');
-                return;
-            }
-
-            const alreadyAdded = selectedTicketTypes.some((ticket) => Number(ticket.ticket_type_id) === Number(selectedTypeId));
-            if (alreadyAdded) {
-                alert('This ticket type has already been added.');
-                return;
-            }
-
-            selectedTicketTypes.push({
-                id: null,
-                ticket_type_id: Number(selectedTypeId),
-                price: Number(price).toFixed(2),
-                quantity: 0,
-                color,
+            ticketTypesList.querySelectorAll('[data-action="price"]').forEach((input) => {
+                input.addEventListener('input', (event) => {
+                    const index = Number(event.currentTarget.dataset.index);
+                    const nextPrice = Number(event.currentTarget.value);
+                    if (Number.isFinite(nextPrice) && nextPrice >= 0) {
+                        selectedTicketTypes[index].price = nextPrice;
+                        const hiddenPrice = rowQuery(index, 'price');
+                        if (hiddenPrice) {
+                            hiddenPrice.value = nextPrice.toFixed(2);
+                        }
+                    }
+                });
             });
 
-            ticketTypeSelect.value = '';
-            ticketPriceInput.value = '';
-            ticketColorInput.value = '#ff6600';
-            renderTicketTypes();
+            ticketTypesList.querySelectorAll('[data-action="color"]').forEach((input) => {
+                input.addEventListener('input', (event) => {
+                    const index = Number(event.currentTarget.dataset.index);
+                    selectedTicketTypes[index].color = event.currentTarget.value;
+                    const hiddenColor = rowQuery(index, 'color');
+                    if (hiddenColor) {
+                        hiddenColor.value = event.currentTarget.value;
+                    }
+                });
+            });
         }
 
-        function removeTicketType(index) {
-            selectedTicketTypes.splice(index, 1);
-            renderTicketTypes();
+        function rowQuery(index, field) {
+            return ticketTypesList.querySelector(`input[name="ticket_types[${index}][${field}]"]`);
         }
-
-        addTicketTypeBtn.addEventListener('click', addTicketType);
-        venueSelect.addEventListener('change', renderTicketTypes);
 
         document.addEventListener('DOMContentLoaded', () => {
             renderTicketTypes();

@@ -32,7 +32,12 @@ class BookingController extends Controller
 
     public function create(Concert $concert)
     {
-        $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        try {
+            $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        } catch (\RuntimeException $exception) {
+            return back()->withErrors(['general' => $exception->getMessage()]);
+        }
+
         if (!empty($mismatches)) {
             return back()->withErrors(['general' => 'Seat inventory is being synchronized. Please try again in a moment.']);
         }
@@ -46,7 +51,14 @@ class BookingController extends Controller
     public function getSeats(Request $request, Concert $concert)
     {
         $ticketTypeId = $request->query('concert_ticket_type_id');
-        $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        try {
+            $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        } catch (\RuntimeException $exception) {
+            return response()->json([
+                'error' => $exception->getMessage(),
+            ], 422);
+        }
+
         if (!empty($mismatches)) {
             return response()->json([
                 'error' => 'Seat allocation mismatch detected. Booking is temporarily blocked until synchronization completes.',
@@ -64,7 +76,6 @@ class BookingController extends Controller
             if (!$concertTicketType) {
                 return response()->json([]);
             }
-
             $seatSection = $this->getSeatSectionFromTicketType($concertTicketType->ticketType->name ?? '');
             if ($seatSection) {
                 $availableSeatsQuery->where('seats.section', $seatSection);
@@ -73,6 +84,7 @@ class BookingController extends Controller
         }
 
         $seats = $availableSeatsQuery
+            ->distinct('seats.id')
             ->orderBy('seats.seat_number')
             ->get();
 
@@ -155,7 +167,12 @@ class BookingController extends Controller
 
     public function confirmPayment(Request $request, Concert $concert)
     {
-        $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        try {
+            $mismatches = $this->concertSeatSyncService->ensureIntegrityOrSync($concert);
+        } catch (\RuntimeException $exception) {
+            return back()->withErrors(['general' => $exception->getMessage()]);
+        }
+
         if (!empty($mismatches)) {
             return back()->withErrors(['general' => 'Seat inventory mismatch detected. Please retry booking after synchronization.']);
         }
@@ -468,4 +485,5 @@ class BookingController extends Controller
             default => null,
         };
     }
+
 }

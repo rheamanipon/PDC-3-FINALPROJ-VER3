@@ -13,19 +13,24 @@
                 </header>
                 <section class="ad-card">
                     <h3 class="ad-panel-title">Edit Venue Information</h3>
-<form method="POST" action="{{ route('admin.venues.update', $venue) }}" enctype="multipart/form-data" class="ad-form-grid-3">
+                    @if(!empty($isUsedByConcerts) && $isUsedByConcerts)
+                        <div style="margin-bottom: 1rem; padding: 0.7rem 0.9rem; border: 1px solid rgba(251,191,36,0.45); border-radius: 0.5rem; background: rgba(251,191,36,0.08); color: #fde68a;">
+                            This venue is already used by concerts. Only capacity increase is allowed.
+                        </div>
+                    @endif
+                    <form method="POST" action="{{ route('admin.venues.update', $venue) }}" enctype="multipart/form-data" class="ad-form-grid-3">
                         @csrf @method('PUT')
                         <div class="ad-field">
                             <label class="ad-label" for="name">Venue Name</label>
-                            <input class="ad-input" id="name" type="text" name="name" value="{{ old('name', $venue->name) }}" required>
+                            <input class="ad-input" id="name" type="text" name="name" value="{{ old('name', $venue->name) }}" required {{ !empty($isUsedByConcerts) && $isUsedByConcerts ? 'readonly' : '' }}>
                         </div>
                         <div class="ad-field">
                             <label class="ad-label" for="location">Location</label>
-                            <input class="ad-input" id="location" type="text" name="location" value="{{ old('location', $venue->location) }}" required>
+                            <input class="ad-input" id="location" type="text" name="location" value="{{ old('location', $venue->location) }}" required {{ !empty($isUsedByConcerts) && $isUsedByConcerts ? 'readonly' : '' }}>
                         </div>
                         <div class="ad-field">
                             <label class="ad-label" for="capacity">Capacity</label>
-                            <input class="ad-input" id="capacity" type="number" name="capacity" value="{{ old('capacity', $venue->capacity) }}" min="1" required>
+                            <input class="ad-input" id="capacity" type="number" name="capacity" value="{{ old('capacity', $venue->capacity) }}" min="{{ !empty($isUsedByConcerts) && $isUsedByConcerts ? $venue->capacity : 1 }}" required>
                         </div>
 
                         <div class="ad-field ad-field-full">

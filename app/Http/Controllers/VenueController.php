@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\Concert;
 use App\Models\Seat;
 use App\Models\Ticket;
 use App\Models\Venue;
@@ -64,7 +65,8 @@ class VenueController extends Controller
 
     public function edit(Venue $venue)
     {
-        return view('admin.venues.edit', compact('venue'));
+        $isUsedByConcerts = $venue->concerts()->exists();
+        return view('admin.venues.edit', compact('venue', 'isUsedByConcerts'));
     }
 
     public function update(Request $request, Venue $venue)
@@ -84,73 +86,58 @@ class VenueController extends Controller
 
         $oldCapacity = $venue->capacity;
         $newCapacity = $data['capacity'];
+        $isUsedByConcerts = $venue->concerts()->exists();
+
+        if ($isUsedByConcerts) {
+            $nameChanged = (string) $data['name'] !== (string) $venue->name;
+            $locationChanged = (string) $data['location'] !== (string) $venue->location;
+            if ($nameChanged || $locationChanged) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['name' => 'Venue name/location cannot be edited once the venue is already used by concerts. Only capacity increase is allowed.']);
+            }
+
+            if ((int) $newCapacity < (int) $oldCapacity) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['capacity' => 'Venue capacity cannot be decreased once the venue is already used by concerts.']);
+            }
+        }
+
+        $concerts = $venue->concerts()->with('concertTicketTypes.ticketType')->get();
 
         // Check ticket allocations for existing concerts
         if ($newCapacity != $oldCapacity) {
-            $concerts = $venue->concerts()->with('concertTicketTypes')->get();
-            $needsRedistribution = false;
-
             foreach ($concerts as $concert) {
                 $totalSold = Ticket::whereHas('concertTicketType', function($q) use ($concert) {
                     $q->where('concert_id', $concert->id);
                 })->count();
-
-                $currentTotal = $concert->concertTicketTypes->sum('quantity');
 
                 if ($newCapacity < $totalSold) {
                     return back()
                         ->withInput()
                         ->withErrors(['capacity' => "Cannot reduce capacity below already sold tickets ({$totalSold}) for concert '{$concert->title}'."]);
                 }
-
-                if ($totalSold == 0 && $currentTotal != $oldCapacity) {
-                    // This shouldn't happen, but skip
-                    continue;
-                }
-
-                if ($totalSold > 0 && $newCapacity != $currentTotal) {
-                    if ($newCapacity < $currentTotal) {
-                        return back()
-                            ->withInput()
-                            ->withErrors(['capacity' => "Cannot reduce capacity below current ticket allocation ({$currentTotal}) for concert '{$concert->title}' with sold tickets."]);
-                    } else {
-                        $needsRedistribution = true;
-                    }
-                }
             }
-
-            $venue->update($data);
-
-            // Adjust ticket allocations
-            foreach ($concerts as $concert) {
-                $totalSold = Ticket::whereHas('concertTicketType', function($q) use ($concert) {
-                    $q->where('concert_id', $concert->id);
-                })->count();
-
-                if ($totalSold == 0) {
-                    // Redistribute proportionally for concerts with no sold tickets
-                    $this->redistributeTicketQuantities($concert, $newCapacity);
-                } elseif ($newCapacity > $oldCapacity) {
-                    // Capacity increased: distribute extra seats proportionally for concerts with sold tickets
-                    $this->distributeExtraTickets($concert, $oldCapacity, $newCapacity);
-                }
-            }
-
-            if ($needsRedistribution) {
-                session()->flash('success', 'Venue capacity increased. Additional ticket allocations have been distributed proportionally.');
-            }
-        } else {
-            $venue->update($data);
         }
+
+        $venue->update($data);
 
         // If capacity changed or the venue has no seats yet, rebuild venue seat templates.
         if ($newCapacity != $oldCapacity || $venue->seats()->count() === 0) {
             $this->createVenueSeats($venue, $newCapacity);
         }
 
-        // Always enforce allocation == selectable seats after any venue updates.
-        foreach ($venue->concerts as $concert) {
-            $this->concertSeatSyncService->syncConcert($concert);
+        // Recalculate concert allocations to match current venue seat setup.
+        foreach ($concerts as $concert) {
+            try {
+                $this->recalculateConcertTicketQuantities($concert, $venue);
+                $this->concertSeatSyncService->syncConcert($concert, true);
+            } catch (\RuntimeException $exception) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['capacity' => $exception->getMessage()]);
+            }
         }
 
         $description = 'Updated venue: '.$venue->name;
@@ -223,111 +210,64 @@ class VenueController extends Controller
         \Log::info('Created ' . $totalSeats . ' seats for venue ' . $venue->id);
     }
 
-    private function redistributeTicketQuantities($concert, $newCapacity)
+    private function recalculateConcertTicketQuantities(Concert $concert, Venue $venue): void
     {
-        $ticketTypes = $concert->concertTicketTypes;
-        if ($ticketTypes->isEmpty()) {
-            return; // No ticket types to redistribute
+        $ticketTypes = $concert->concertTicketTypes()->with('ticketType')->get();
+        if ($ticketTypes->isEmpty()) return;
+
+        $sectionSeatCounts = Seat::where('venue_id', $venue->id)
+            ->select('section', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
+            ->groupBy('section')
+            ->pluck('total', 'section');
+
+        $targets = [];
+        $assigned = 0;
+        $flexible = [];
+
+        foreach ($ticketTypes as $ctt) {
+            $slug = $ctt->ticketType->name ?? '';
+            $section = $this->getSeatSectionFromTicketType($slug);
+            if ($section === null) {
+                $flexible[] = $ctt;
+                continue;
+            }
+            $targets[$ctt->id] = (int) ($sectionSeatCounts[$section] ?? 0);
+            $assigned += $targets[$ctt->id];
         }
 
-        $totalCurrent = $ticketTypes->sum('quantity');
-        if ($totalCurrent == 0) {
-            // If all are 0, distribute equally
-            $equalShare = (int) ($newCapacity / $ticketTypes->count());
-            $remainder = $newCapacity % $ticketTypes->count();
-            foreach ($ticketTypes as $index => $ctt) {
-                $quantity = $equalShare + ($index < $remainder ? 1 : 0);
-                $ctt->update(['quantity' => $quantity]);
+        $remaining = max(0, (int) $venue->capacity - $assigned);
+        $flexibleCount = count($flexible);
+        if ($flexibleCount > 0) {
+            $base = intdiv($remaining, $flexibleCount);
+            $remainder = $remaining % $flexibleCount;
+            foreach ($flexible as $index => $ctt) {
+                $targets[$ctt->id] = $base + ($index < $remainder ? 1 : 0);
             }
-        } else {
-            // Proportional redistribution
-            $totalAssigned = 0;
-            $updates = [];
-            foreach ($ticketTypes as $ctt) {
-                $proportion = $ctt->quantity / $totalCurrent;
-                $newQuantity = (int) round($proportion * $newCapacity);
-                $updates[] = ['ctt' => $ctt, 'quantity' => max(1, $newQuantity)]; // Ensure at least 1
-                $totalAssigned += max(1, $newQuantity);
-            }
+        }
 
-            // Adjust to make sum exactly newCapacity
-            $diff = $newCapacity - $totalAssigned;
-            if ($diff != 0) {
-                // Add/subtract from the first one
-                $updates[0]['quantity'] += $diff;
-            }
+        foreach ($ticketTypes as $ctt) {
+            $soldCount = Ticket::where('concert_ticket_type_id', $ctt->id)->count();
+            $newQuantity = max($targets[$ctt->id] ?? 0, $soldCount);
+            $ctt->update(['quantity' => $newQuantity]);
+        }
 
-            foreach ($updates as $update) {
-                $update['ctt']->update(['quantity' => $update['quantity']]);
-            }
+        $allocated = (int) $ticketTypes->fresh()->sum('quantity');
+        if ($allocated !== (int) $venue->capacity) {
+            throw new \RuntimeException("Ticket allocation mismatch for concert '{$concert->title}'. Expected {$venue->capacity}, got {$allocated}.");
         }
     }
 
-    /**
-     * Distribute extra seats proportionally when capacity increases for concerts with sold tickets
-     * 
-     * Calculation:
-     * - extra = newCapacity - oldCapacity
-     * - For each ticket type:
-     *   - proportion = currentQuantity / currentTotal
-     *   - extraShare = round(proportion * extra)
-     *   - newQuantity = currentQuantity + extraShare
-     */
-    private function distributeExtraTickets($concert, $oldCapacity, $newCapacity)
+    private function getSeatSectionFromTicketType(string $ticketTypeSlug): ?string
     {
-        $ticketTypes = $concert->concertTicketTypes;
-        if ($ticketTypes->isEmpty()) {
-            return; // No ticket types to update
-        }
-
-        $extra = $newCapacity - $oldCapacity;
-        if ($extra <= 0) {
-            return; // No extra seats to distribute
-        }
-
-        $currentTotal = $ticketTypes->sum('quantity');
-        if ($currentTotal == 0) {
-            return; // No current allocation, skip
-        }
-
-        $totalDistributed = 0;
-        $updates = [];
-
-        // Calculate proportional distribution of extra seats
-        foreach ($ticketTypes as $ctt) {
-            $proportion = $ctt->quantity / $currentTotal;
-            $extraShare = (int) round($proportion * $extra);
-            $newQuantity = $ctt->quantity + $extraShare;
-            
-            $updates[] = [
-                'ctt' => $ctt,
-                'oldQuantity' => $ctt->quantity,
-                'newQuantity' => $newQuantity,
-            ];
-            $totalDistributed += $extraShare;
-        }
-
-        // Adjust for rounding differences to ensure total matches exactly
-        $diff = $extra - $totalDistributed;
-        if ($diff != 0) {
-            $updates[0]['newQuantity'] += $diff;
-        }
-
-        // Apply updates
-        foreach ($updates as $update) {
-            $update['ctt']->update(['quantity' => $update['newQuantity']]);
-        }
-
-        // Log the distribution
-        \Log::info("Distributed {$extra} extra seats for concert '{$concert->title}' (capacity {$oldCapacity} -> {$newCapacity})", [
-            'concert_id' => $concert->id,
-            'old_capacity' => $oldCapacity,
-            'new_capacity' => $newCapacity,
-            'extra_seats' => $extra,
-            'total_allocation_before' => $currentTotal,
-            'total_allocation_after' => $newCapacity,
-            'distribution' => $updates,
-        ]);
+        return match ($ticketTypeSlug) {
+            'VIP Seated' => 'VIP Seated',
+            'LBB' => 'Lower Box B (LBB)',
+            'UBB' => 'Upper Box B (UBB)',
+            'LBA' => 'Lower Box A (LBA)',
+            'UBA' => 'Upper Box A (UBA)',
+            'Gen Ad', 'GEN AD' => 'General Admission (Gen Ad)',
+            default => null,
+        };
     }
 
 }
